@@ -123,11 +123,12 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 static const int SLOT_X[5] = { -40, 104, 233, 362, 506 };
 static const int SLOT_Y[5] = { 318, 302, 290, 302, 318 };
 static const int SLOT_R[5] = {  20,  36,  60,  36,  20 };
-#define APP_COUNT   3
+#define APP_COUNT   4
 #define APP_PICTURES 0
 #define APP_DECIDER  1
-#define APP_SETTINGS 2
-static const char *APP_NAME[APP_COUNT] = { "PICTURES", "DECIDER", "SETTINGS" };
+#define APP_RUMOURS  2
+#define APP_SETTINGS 3
+static const char *APP_NAME[APP_COUNT] = { "PICTURES", "DECIDER", "RUMOURS", "SETTINGS" };
 #define DOTS_Y      360                  // page dots, between the icon and the pill
 #define HPILL_X     118                  // home pill: app name + Wi-Fi line
 #define HPILL_Y     372
@@ -177,6 +178,7 @@ static const int MARK[4][2] = {{120, 130}, {346, 130}, {120, 336}, {346, 336}};
 #define ST_GALLERY      4
 #define ST_GALLERY_SYNC 5
 #define ST_DECIDER      6               // Decider.ino: the coin toss
+#define ST_RUMOURS      7               // Rumours.ino: a random rumour MP3
 static int homeApp = APP_PICTURES;      // which app is in the middle of the carousel
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -303,9 +305,11 @@ void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
   if (focus) gfx->drawCircle(cx, cy, R - 1, ring);
   uint16_t fg = focus ? RGB565(150, 230, 255) : RGB565(110, 170, 200);
   void drawDeciderIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);   // Decider.ino
+  void drawRumoursIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);   // Rumours.ino
   switch (app) {
     case APP_PICTURES: drawPicturesIcon(cx, cy, (R * 76) / 100, fg, RGB565(12, 12, 18)); break;
     case APP_DECIDER:  drawDeciderIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
+    case APP_RUMOURS:  drawRumoursIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
     case APP_SETTINGS: drawCog(cx, cy, (R * 52) / 100, fg, RGB565(12, 12, 18));        break;
   }
 }
@@ -392,6 +396,7 @@ void openApp(int app) {
       showScreen(ST_GALLERY);
       break;
     case APP_DECIDER:  showScreen(ST_DECIDER); break;
+    case APP_RUMOURS:  showScreen(ST_RUMOURS); break;
     case APP_SETTINGS: showScreen(ST_MENU);    break;
   }
 }
@@ -561,6 +566,8 @@ void drawTouchTest() {
 }
 
 void showScreen(int s) {
+  void rumoursStop();                          // Rumours.ino
+  if (s != ST_RUMOURS) rumoursStop();          // leaving Rumours silences it
   screen = s;
   uint32_t t0 = millis();
   switch (s) {
@@ -571,6 +578,7 @@ void showScreen(int s) {
     case ST_GALLERY:      showGallery();      return;  // Gallery.ino; flushes its own frames
     case ST_GALLERY_SYNC: drawGallerySync();  return;  // flushes itself (and not when quiet)
     case ST_DECIDER:      showDecider();      return;  // Decider.ino; animates, flushes itself
+    case ST_RUMOURS:      showRumours();      return;  // Rumours.ino; plays in the background
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -793,6 +801,13 @@ void handleTap(int16_t x, int16_t y) {
     return;
   }
 
+  if (screen == ST_RUMOURS) {
+    void rumoursTap(int x, int y);            // Rumours.ino
+    rumoursTap(x, y);
+    lastActMs = millis() - t0;
+    return;
+  }
+
   if (screen == ST_DECIDER) {
     void deciderTap(int x, int y);            // Decider.ino
     deciderTap(x, y);
@@ -953,7 +968,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v2.7 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, settings ===");
+  Serial.println("=== Thanks Danny badge v2.8 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, settings ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1051,6 +1066,8 @@ void loop() {
       void galleryBootFetch();          // Gallery.ino, later in the same translation unit
       delay(500);                       // let DNS and the route settle before the first handshake
       galleryBootFetch();
+      void rumoursBootFetch();          // Rumours.ino: the rumour clips, quietly
+      rumoursBootFetch();
       // Redraw the home screen so its Wi-Fi line shows the address (a redraw is ~80 ms now), and
       // come back to it if a first-boot sync took the screen over.
       if (screen == ST_HOME || screen == ST_GALLERY_SYNC) showScreen(ST_HOME);
@@ -1061,5 +1078,6 @@ void loop() {
       if (screen == ST_APINFO) showScreen(ST_APINFO);
     }
   }
+  if (screen == ST_RUMOURS) { void rumoursTick(); rumoursTick(); }   // the sound bars
   delay(POLL_MS);
 }

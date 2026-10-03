@@ -342,6 +342,38 @@ caption says so ("TAP NEXT  HOLD HOME") for 2.5 s. The gallery's tap detection n
 time-based lift as the home screen (35 ms without a report), so a long press cannot skip several
 pictures. Build 2,481,179 bytes.
 
+## v2.8 - Rumours app
+
+A fourth carousel app (Pictures, Decider, **Rumours**, Settings) with a megaphone icon. It plays a
+random rumour - a short MP3 about Danny - with the speaker's name, an "AI voice parody" line
+under it, and sound bars that follow the real loudness of each decoded frame. AGAIN | HOME at
+the bottom like the Decider; tap anywhere else for another one; leaving the screen stops it.
+`preview_rumours.png` is a render through the round mask.
+
+- **Source**: `Downloads\ThanksDanny\mp3` - 9 AI voice parody clips (44.1 kHz, 128 kbit/s,
+  4-35 s). `tools\prep_rumours.py` re-encodes them to 16 kHz mono 48 kbit/s with even loudness
+  (3.3 MB -> 1.2 MB), names them `rNN.mp3`, and writes `rumours.txt`
+  (`<file> <bytes> <speaker>`) into `github-pics\rumours\`. Speaker names come from the
+  `[brackets]` in the file names, tidied by a table in the script.
+- **Hosting**: the public GitHub Pages site, next to the pictures (the user chose public over
+  badge-only). `push_pictures_site.cmd` publishes it. The site README and `rumours.txt` say the
+  clips are AI parody, and so does the badge screen.
+- **Download**: same as the pictures - fetched at boot (quietly if a set is cached), any clip
+  whose size changed is downloaded into `/rumours` on LittleFS, and a copy of the list is kept
+  so it works offline. First open with nothing cached shows "fetching n of m".
+- **Decoding**: the Helix fixed-point MP3 decoder vendored in `Badge\src\helix` (RealNetworks
+  RPSL/RCSL licence, taken from ESP8266Audio), driven by `Badge\src\mp3stream.c`. Tested on the
+  PC on the real clips: **correlation 1.0000 with ffmpeg's decode at zero lag**, durations
+  matching, clean under AddressSanitizer, including the 24 kHz stereo drum roll.
+  ESP8266Audio itself is not used: its I2S output links the legacy ESP-IDF I2S driver, which
+  aborts at boot next to the new driver this sketch uses.
+- **Playback**: a FreeRTOS task on core 0 decodes from LittleFS and writes to the same 16 kHz
+  I2S/ES8311 path as the Decider (`decAudioInit()`), so no clock change between apps. It never
+  plays over the drum roll, and the amp is switched off after each clip.
+- Random order is a shuffled deck: every rumour plays once before any repeats, and a new deck
+  never starts with the one that just played.
+- Build: **2,544,003 bytes** (53%), globals 22%.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
