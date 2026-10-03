@@ -1,0 +1,16 @@
+# Run the badge broker in Docker:   docker compose up -d
+# Folder layout next to this file:
+#   config/mosquitto.conf  config/acl  config/passwd   (copy mosquitto.conf and acl into config/)
+#   certs/fullchain.pem    certs/privkey.pem           (from Let's Encrypt, see README.md)
+#   data/                                                (created automatically)
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: sos-mosquitto
+    restart: unless-stopped
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./config:/mosquitto/config
+      - ./certs:/mosquitto/certs:ro
+      - ./data:/mosquitto/data

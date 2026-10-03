@@ -13,3 +13,6 @@ preview_wallpapers.png
 *.zip
 desktop.ini
 Thumbs.db
+
+# --- local badge settings (broker address): kept off GitHub ---
+Badge/sos_local.h

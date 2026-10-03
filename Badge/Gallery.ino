@@ -566,6 +566,9 @@ int holdStill(uint16_t *src, int w, int h, uint16_t *spare) {
       showScreen(ST_HOME);
       return 1;
     }
+    // A slap from another badge ends the slideshow; loop() then shows it.
+    bool sosSlapWaiting();
+    if (sosSlapWaiting()) { Serial.println("gallery: incoming slap - leaving the slideshow"); return 1; }
     int g = galleryGesture();
     if (g == 2) {
       Serial.println("gallery: hold -> main screen");

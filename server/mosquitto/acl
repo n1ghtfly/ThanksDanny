@@ -1,0 +1,20 @@
+# Sons of Sudo badge permissions. One login per badge: claudio, danny, walter.
+# (%u = the login name.) "pattern" lines apply to every user.
+
+# Slaps (and later other messages) go to  sos/<to>/inbox/<from>.
+# You may write into anyone's inbox, but only under your OWN name - the broker enforces
+# who the sender is, so nobody can slap in someone else's name.
+pattern write sos/+/inbox/%u
+# ...and you can only read your own inbox.
+pattern read  sos/%u/inbox/+
+
+# Online / offline: you set your own, you can see everyone's.
+pattern write sos/presence/%u
+pattern read  sos/presence/+
+
+# Group messages (hot potato, summon, ...) for later versions.
+pattern readwrite sos/all/#
+
+# A PC login for tools/sos_cli.py: can watch everything (it sends like any other user).
+user console
+topic read sos/#

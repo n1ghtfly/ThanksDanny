@@ -123,12 +123,13 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 static const int SLOT_X[5] = { -40, 104, 233, 362, 506 };
 static const int SLOT_Y[5] = { 318, 302, 290, 302, 318 };
 static const int SLOT_R[5] = {  20,  36,  60,  36,  20 };
-#define APP_COUNT   4
+#define APP_COUNT   5
 #define APP_PICTURES 0
 #define APP_DECIDER  1
 #define APP_RUMOURS  2
-#define APP_SETTINGS 3
-static const char *APP_NAME[APP_COUNT] = { "PICTURES", "DECIDER", "RUMOURS", "SETTINGS" };
+#define APP_SLAP     3
+#define APP_SETTINGS 4
+static const char *APP_NAME[APP_COUNT] = { "PICTURES", "DECIDER", "RUMOURS", "SLAP", "SETTINGS" };
 #define DOTS_Y      360                  // page dots, between the icon and the pill
 #define HPILL_X     118                  // home pill: app name + Wi-Fi line
 #define HPILL_Y     372
@@ -152,10 +153,10 @@ static const char *APP_NAME[APP_COUNT] = { "PICTURES", "DECIDER", "RUMOURS", "SE
 // y=120 and the bottom of the safe area, so they are shorter than they were back at three.
 #define ROW_X 63
 #define ROW_W 340
-#define ROW_H 64
-#define ROW_Y0 150
-#define ROW_GAP 10
-#define ROW_COUNT 2                       // v2.9: Wi-Fi setup + Close (Pictures and Touch test removed)
+#define ROW_H 56
+#define ROW_Y0 112
+#define ROW_GAP 8
+#define ROW_COUNT 4                       // v3.1: Wi-Fi + badge setup, This badge, Slap sound, Close
 
 // Gallery.ino (the picture app) is concatenated AFTER this file, so its globals are not yet
 // declared here. This file's JPEG callback needs to know when the gallery wants blocks packed
@@ -175,6 +176,8 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_GALLERY_SYNC 5
 #define ST_DECIDER      6               // Decider.ino: the coin toss
 #define ST_RUMOURS      7               // Rumours.ino: a random rumour MP3
+#define ST_SLAP         8               // Sos.ino: pick a victim, swing to slap
+#define ST_SLAPPED      9               // Sos.ino: you just got slapped
 static int homeApp = APP_PICTURES;      // which app is in the middle of the carousel
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -302,10 +305,12 @@ void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
   uint16_t fg = focus ? RGB565(150, 230, 255) : RGB565(110, 170, 200);
   void drawDeciderIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);   // Decider.ino
   void drawRumoursIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);   // Rumours.ino
+  void drawSlapIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);      // Sos.ino
   switch (app) {
     case APP_PICTURES: drawPicturesIcon(cx, cy, (R * 76) / 100, fg, RGB565(12, 12, 18)); break;
     case APP_DECIDER:  drawDeciderIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
     case APP_RUMOURS:  drawRumoursIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
+    case APP_SLAP:     drawSlapIcon(cx, cy, (R * 70) / 100, fg, RGB565(12, 12, 18));    break;
     case APP_SETTINGS: drawCog(cx, cy, (R * 52) / 100, fg, RGB565(12, 12, 18));        break;
   }
 }
@@ -348,7 +353,10 @@ void drawCarousel(float p) {
   centred(HPILL_Y + 7, APP_NAME[shown], 2, RGB565_WHITE);
   char net[40];
   uint16_t nc;
-  if (WiFi.status() == WL_CONNECTED) { snprintf(net, sizeof(net), "wifi %s", WiFi.localIP().toString().c_str()); nc = RGB565(150, 240, 160); }
+  bool sosConfigured(); int sosOnlineCount(); bool sosnet_connected();
+  if (WiFi.status() == WL_CONNECTED && sosConfigured() && sosnet_connected())
+                                     { snprintf(net, sizeof(net), "wifi ok  -  sos %d/3 online", sosOnlineCount()); nc = RGB565(150, 240, 160); }
+  else if (WiFi.status() == WL_CONNECTED) { snprintf(net, sizeof(net), "wifi %s", WiFi.localIP().toString().c_str()); nc = RGB565(150, 240, 160); }
   else if (apRunning)                { snprintf(net, sizeof(net), "setup: join %s", AP_SSID); nc = RGB565(150, 220, 255); }
   else if (connecting)               { snprintf(net, sizeof(net), "wifi: connecting..."); nc = RGB565(255, 220, 120); }
   else                               { snprintf(net, sizeof(net), "wifi: not connected"); nc = RGB565(255, 200, 120); }
@@ -393,6 +401,7 @@ void openApp(int app) {
       break;
     case APP_DECIDER:  showScreen(ST_DECIDER); break;
     case APP_RUMOURS:  showScreen(ST_RUMOURS); break;
+    case APP_SLAP:     { extern int slapState; slapState = 0; showScreen(ST_SLAP); } break;
     case APP_SETTINGS: showScreen(ST_MENU);    break;
   }
 }
@@ -441,26 +450,49 @@ void drawMenu() {
   gfx->fillScreen(RGB565(12, 12, 16));
   centred(26, "Settings", 3, RGB565_WHITE);
   gfx->drawFastHLine(ROW_X, 78, ROW_W, RGB565(60, 60, 72));
+  const char *sosMeLabel();
+  bool sosIsMuted();
 
-  // v2.9: only settings live here. Pictures is on the home carousel; the touch test is gone.
   int y = ROW_Y0;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
   gfx->setTextSize(2);
   gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 12);
-  gfx->print("Wi-Fi setup on phone");
+  gfx->setCursor(ROW_X + 18, y + 9);
+  gfx->print("Setup on phone");
   gfx->setTextSize(1);
   gfx->setTextColor(RGB565(150, 200, 255));
-  gfx->setCursor(ROW_X + 18, y + 38);
-  if (WiFi.status() == WL_CONNECTED)      gfx->printf("connected: %s", WiFi.localIP().toString().c_str());
-  else if (wifiSSID.length())             gfx->printf("saved: %s (not connected)", wifiSSID.c_str());
-  else                                    gfx->print("no network saved yet - pictures need this");
+  gfx->setCursor(ROW_X + 18, y + 34);
+  if (WiFi.status() == WL_CONNECTED)      gfx->printf("Wi-Fi + broker - connected %s", WiFi.localIP().toString().c_str());
+  else if (wifiSSID.length())             gfx->printf("Wi-Fi + broker - %s not connected", wifiSSID.c_str());
+  else                                    gfx->print("Wi-Fi + broker - nothing saved yet");
 
   y += ROW_H + ROW_GAP;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
   gfx->setTextSize(2);
   gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 24);
+  gfx->setCursor(ROW_X + 18, y + 9);
+  gfx->printf("This badge: %s", sosMeLabel());
+  gfx->setTextSize(1);
+  gfx->setTextColor(RGB565(150, 200, 255));
+  gfx->setCursor(ROW_X + 18, y + 34);
+  gfx->print("tap to change: Claudio / Danny / Walter");
+
+  y += ROW_H + ROW_GAP;
+  button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
+  gfx->setTextSize(2);
+  gfx->setTextColor(RGB565_WHITE);
+  gfx->setCursor(ROW_X + 18, y + 9);
+  gfx->printf("Slap sound: %s", sosIsMuted() ? "OFF" : "ON");
+  gfx->setTextSize(1);
+  gfx->setTextColor(RGB565(150, 200, 255));
+  gfx->setCursor(ROW_X + 18, y + 34);
+  gfx->print(sosIsMuted() ? "slaps arrive silently (meeting mode)" : "tap to mute for meetings");
+
+  y += ROW_H + ROW_GAP;
+  button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
+  gfx->setTextSize(2);
+  gfx->setTextColor(RGB565_WHITE);
+  gfx->setCursor(ROW_X + 18, y + 20);
   gfx->print("Close");
 
   Serial.printf("ui     : settings (%d rows, last ends at y=%d)\n", ROW_COUNT, y + ROW_H);
@@ -516,6 +548,8 @@ void showScreen(int s) {
     case ST_GALLERY_SYNC: drawGallerySync();  return;  // flushes itself (and not when quiet)
     case ST_DECIDER:      showDecider();      return;  // Decider.ino; animates, flushes itself
     case ST_RUMOURS:      showRumours();      return;  // Rumours.ino; plays in the background
+    case ST_SLAP:         showSlap();         return;  // Sos.ino
+    case ST_SLAPPED:      showSlapped();      return;  // Sos.ino; the incoming-slap takeover
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -601,7 +635,10 @@ String buildPage() {
           "<span style='color:#667;font-size:13px'> - " + String(scanCount) +
           " in the list; rescan if yours is missing</span></p>";
   page += F("<p style='color:#667;font-size:13px'>Leave the password empty for an open network. "
-            "The badge does not display or log it.</p></body>");
+            "The badge does not display or log it.</p>");
+  String sosSetupForm();                // Sos.ino: badge name + MQTT broker
+  page += sosSetupForm();
+  page += F("</body>");
   return page;
 }
 
@@ -650,6 +687,7 @@ void startSetupAP() {
     server.on("/", handleRoot);
     server.on("/rescan", handleRescan);
     server.on("/save", HTTP_POST, handleSave);
+    server.on("/sos", HTTP_POST, []() { void sosHandleSave(); sosHandleSave(); });
     server.onNotFound([]() { server.send(200, "text/html", buildPage()); });
     server.begin();
     apRunning = true;
@@ -666,9 +704,10 @@ void handleTap(int16_t x, int16_t y) {
 
   // Acknowledge before working. The screen change itself can take ~350 ms on this panel.
   if (screen == ST_MENU && x >= ROW_X && x <= ROW_X + ROW_W) {
-    int y1 = ROW_Y0, y2 = ROW_Y0 + ROW_H + ROW_GAP;
-    if (y >= y1 && y <= y1 + ROW_H)       ackRow(y1);
-    else if (y >= y2 && y <= y2 + ROW_H)  ackRow(y2);
+    for (int r = 0; r < ROW_COUNT; r++) {
+      int ry = ROW_Y0 + r * (ROW_H + ROW_GAP);
+      if (y >= ry && y <= ry + ROW_H) ackRow(ry);
+    }
   } else if (screen == ST_APINFO) {
     if (x >= PILL_X && x <= PILL_X + PILL_W && y >= PILL_Y && y <= PILL_Y + PILL_H)
       gfx->drawRoundRect(PILL_X - 3, PILL_Y - 3, PILL_W + 6, PILL_H + 6, 16, RGB565(150, 230, 255));
@@ -690,6 +729,8 @@ void handleTap(int16_t x, int16_t y) {
   if (screen == ST_MENU) {
     int y1 = ROW_Y0;
     int y2 = y1 + ROW_H + ROW_GAP;
+    int y3 = y2 + ROW_H + ROW_GAP;
+    int y4 = y3 + ROW_H + ROW_GAP;
     if (x >= ROW_X && x <= ROW_X + ROW_W) {
       if (y >= y1 && y <= y1 + ROW_H) {
         // Use the scan cached at boot. Rescanning here measured 3363 ms on the tap path -
@@ -704,6 +745,10 @@ void handleTap(int16_t x, int16_t y) {
         startSetupAP();
         showScreen(ST_APINFO);
       } else if (y >= y2 && y <= y2 + ROW_H) {
+        void sosCycleMe(); sosCycleMe(); showScreen(ST_MENU);
+      } else if (y >= y3 && y <= y3 + ROW_H) {
+        void sosToggleMute(); sosToggleMute(); showScreen(ST_MENU);
+      } else if (y >= y4 && y <= y4 + ROW_H) {
         Serial.println("         -> menu: close");      showScreen(ST_HOME);
       }
     }
@@ -729,6 +774,9 @@ void handleTap(int16_t x, int16_t y) {
     lastActMs = millis() - t0;
     return;
   }
+
+  if (screen == ST_SLAP)    { void slapTap(int x, int y);    slapTap(x, y);    lastActMs = millis() - t0; return; }
+  if (screen == ST_SLAPPED) { void slappedTap(int x, int y); slappedTap(x, y); lastActMs = millis() - t0; return; }
 
   if (screen == ST_RUMOURS) {
     void rumoursTap(int x, int y);            // Rumours.ino
@@ -870,7 +918,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.0 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, settings ===");
+  Serial.println("=== Thanks Danny badge v3.1 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, slap, settings ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -926,6 +974,10 @@ void setup() {
     Serial.println("! touch init FAILED - the cog will not respond");
   }
 
+  void sosLoadConfig(); void sosImuBegin();    // Sos.ino: badge name + broker, and the motion sensor
+  sosLoadConfig();
+  sosImuBegin();
+
   void startupSoundStart();                    // Startup.ino: needs the I2C bus, so after touch
   startupSoundStart();
 
@@ -977,6 +1029,8 @@ void loop() {
       galleryBootFetch();
       void rumoursBootFetch();          // Rumours.ino: the rumour clips, quietly
       rumoursBootFetch();
+      void sosStart();                  // Sos.ino: join the badge network
+      sosStart();
       // Redraw the home screen so its Wi-Fi line shows the address (a redraw is ~80 ms now), and
       // come back to it if a first-boot sync took the screen over.
       if (screen == ST_HOME || screen == ST_GALLERY_SYNC) showScreen(ST_HOME);
@@ -988,5 +1042,7 @@ void loop() {
     }
   }
   if (screen == ST_RUMOURS) { void rumoursTick(); rumoursTick(); }   // the sound bars
+  void sosPoll(); sosPoll();                                          // badge network: slaps, presence
+  if (screen == ST_SLAP) { void sosTick(); sosTick(); }              // swing detection
   delay(POLL_MS);
 }

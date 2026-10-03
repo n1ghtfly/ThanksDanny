@@ -401,6 +401,37 @@ screen. A tap or BOOT skips it. `preview_startup.png` is the picture as it appea
   decoded on the PC with the badge's decoder: 195 frames, 7.02 s, no errors.
 - Build: **3,020,147 bytes** (64% of the app partition).
 
+## v3.1 - SLAP: the badge network (MQTT)
+
+The badges (Claudio, Danny, Walter) now talk to each other through your own Mosquitto. First feature:
+**the remote slap**. `preview_slap.png` shows the pick screen, the armed screen and the incoming slap.
+
+- **SLAP** is a fifth carousel app. It shows the other two badges with an online dot; tap one, then
+  **swing your badge like a slap**. The QMI8658 gyro measures the swing (a turn over 480 dps starts it,
+  the peak over the next 120 ms sets the strength, 2000 dps = 10/10). A SLAP button sends a polite 5
+  without swinging. 2.5 s cooldown between slaps.
+- **Getting slapped** interrupts any screen (the slideshow checks between pictures): a hand swings in,
+  the screen shakes in proportion to the strength, a slap sound plays louder for harder slaps, the
+  counter goes up, and **SLAP BACK** arms a return slap. Slaps sent while a badge is off are kept by the
+  broker and land when it comes back ("x3, hardest 8/10").
+- **Settings** gained *This badge: <name>* (tap to cycle) and *Slap sound: ON/OFF* (meeting mode).
+  The broker host, port, TLS and login are on the phone setup page (Settings -> Setup on phone), stored
+  on the badge only; the password is write-only. After an MQTT-only save the setup network closes by itself.
+- **Home pill** shows "sos 2/3 online" once connected.
+- **Protocol**: `sos/<to>/inbox/<from>` = `slap|<1-10>` (QoS 1, persistent sessions), `sos/presence/<name>`
+  = `1`/`0` retained with `0` as the last will. The ACL in `server/mosquitto/acl` lets `<from>` only be the
+  sender's own login. Tested on Mosquitto 2.0.22 built from source: delivery, spoofing blocked, inbox
+  snooping blocked, presence spoofing blocked, offline delivery, last will.
+- **MQTT client**: ESP-IDF's esp-mqtt (part of the ESP32 core, no library), in `Badge/src/sosnet.cpp`, TLS
+  checked against the core's public CA bundle - so the broker needs a public certificate (Let's Encrypt via
+  the DuckDNS DNS challenge, see `server/mosquitto/README.md`).
+- **Sounds** (`Badge/sos_sounds.h`) are synthesized by `tools/make_sos_sounds.py`: whoosh + smack + thump.
+- **Broker address** default comes from `Badge/sos_local.h`, which is git-ignored, so the address is not
+  in the public repository; without that file the host is typed on the setup page.
+- **PC tool**: `tools/sos_cli.py` (needs `pip install paho-mqtt`): `watch`, `who`, `slap <name> [1-10]` -
+  tested against the broker above.
+- Build: **3,110,631 bytes** (65%), globals 23%.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
