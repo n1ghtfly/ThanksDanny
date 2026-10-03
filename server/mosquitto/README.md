@@ -77,3 +77,50 @@ certificate is in place.
 
 (add `--no-tls --port 1883` for the home test of step 5). With one badge, you can slap it from the PC
 and watch it react.
+
+## 7. If you run IOTstack (Mosquitto in Docker)
+
+IOTstack keeps Mosquitto's files in `~/IOTstack/volumes/mosquitto/` (container name `mosquitto`).
+
+    docker exec mosquitto mosquitto_passwd -b /mosquitto/pwfile/pwfile claudio PASS1
+    docker exec mosquitto mosquitto_passwd -b /mosquitto/pwfile/pwfile danny   PASS2
+    docker exec mosquitto mosquitto_passwd -b /mosquitto/pwfile/pwfile walter  PASS3
+    docker exec mosquitto mosquitto_passwd -b /mosquitto/pwfile/pwfile nodered PASS4   # your other clients
+
+Put this folder's `acl` in `~/IOTstack/volumes/mosquitto/config/sos.acl` and add a
+`user <name>` + `topic readwrite #` pair for each existing client (Node-RED, Home Assistant, ...).
+In `~/IOTstack/volumes/mosquitto/config/mosquitto.conf`:
+
+    listener 1883
+    allow_anonymous false
+    password_file /mosquitto/pwfile/pwfile
+    acl_file /mosquitto/config/sos.acl
+
+Then `cd ~/IOTstack && docker-compose restart mosquitto` and check `docker logs mosquitto --tail 20`.
+Give Node-RED's MQTT broker node its new login. Mosquitto itself stays on plain 1883 inside the LAN.
+
+## 8. If you run Nginx Proxy Manager in front (TLS for outside access)
+
+NPM's Proxy Hosts are HTTP-only; MQTT needs a TCP **stream**. NPM includes
+`/data/nginx/custom/stream.conf` in its stream block, so TLS can terminate there with the Let's Encrypt
+certificate NPM already manages - Mosquitto then needs no certificate at all.
+
+1. NPM -> SSL Certificates -> Let's Encrypt for `<your-broker>.duckdns.org` (DNS challenge with
+   DuckDNS if port 80 does not reach NPM).
+2. In NPM's shell: `ls /etc/letsencrypt/live/` - note the `npm-N` folder of that certificate.
+3. Create `/data/nginx/custom/stream.conf`:
+
+       server {
+           listen 8883 ssl;
+           ssl_certificate     /etc/letsencrypt/live/npm-N/fullchain.pem;
+           ssl_certificate_key /etc/letsencrypt/live/npm-N/privkey.pem;
+           proxy_pass <mosquitto-LAN-IP>:1883;
+       }
+
+   then `nginx -t && nginx -s reload` (or `openresty -t && systemctl reload openresty`). If NPM runs in
+   Docker, also publish `8883:8883`.
+4. Router: forward TCP 8883 to the NPM machine. Nothing for 1883.
+5. Badges and `sos_cli.py`: host `<your-broker>.duckdns.org`, port 8883, TLS on.
+
+Note: when the broker name resolves to your public IP, a home-network test must use Mosquitto's LAN IP
+directly (port 1883, no TLS) until step 4 is done.
