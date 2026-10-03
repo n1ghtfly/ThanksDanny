@@ -1,0 +1,8 @@
+Thanks Danny badge v2.7
+
+Firmware and tools for the Waveshare ESP32-S3-Touch-AMOLED-1.75C round badge:
+app carousel home screen (Pictures, Decider, Settings), GitHub Pages picture gallery,
+coin-toss Decider with drum roll, Wi-Fi setup from a phone. See PROJECT.md.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012R8JJx6p23WgobAAvQmpz9

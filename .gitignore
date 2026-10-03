@@ -1,0 +1,15 @@
+# --- large, regenerable flash images (kept on the PC, not in git) ---
+build/
+*.bin
+*.bin.sha256
+
+# --- third-party wallpapers: downloaded images, not ours to republish ---
+# (son_of_sudo.jpg and "son of sudo.jpg" ARE published; the wp*.jpg ones are not)
+data/wallpaper/wp*.jpg
+assets/wallpaper_originals/wp*.jpg
+preview_wallpapers.png
+
+# --- local leftovers ---
+*.zip
+desktop.ini
+Thumbs.db
