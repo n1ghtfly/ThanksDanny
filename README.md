@@ -380,6 +380,27 @@ Settings now has two rows: **Wi-Fi setup on phone** and **Close** (taller, centr
 **Pictures** was removed from it (it is on the home carousel) and the **Touch test** screen was
 removed from the firmware altogether; tap timings are still logged on serial. Build 2,542,855 bytes.
 
+## v3.0 - startup splash
+
+At power-on the badge now shows a **startup picture** (the Sons of Sudo bikers outside the
+Biker Clubhouse) and plays a **startup sound** (a 7 s superhero intro), then goes to the home
+screen. A tap or BOOT skips it. `preview_startup.png` is the picture as it appears on the glass.
+
+- Source: `Downloads\ThanksDanny\startup\` (the first picture and the first .mp3 in it).
+  `tools\prep_startup.py` crops the 1792x2390 portrait to a square near the top (`BIAS` 0.08,
+  picked from renders through the round mask: sign, three faces and the "EST. 2010" patch all on
+  the glass), blacks out the corners and stores it as raw RGB565 (424 kB); the sound is
+  re-encoded to 16 kHz mono 48 kbit/s MP3 (41 kB). Both go into `Badge\startup_assets.h`.
+- Compiled in, so the splash appears ~50 ms after the panel starts - before Wi-Fi, and even after
+  a filesystem reflash. The picture is a memcpy + one flush, no decode.
+- Sequence in `setup()`: panel up -> **splash picture** -> filesystem, touch -> **sound starts**
+  (needs the I2C bus that touch brings up) -> Wi-Fi connect begins -> **wait** until the sound
+  ends (at least 1.8 s, at most 15 s; a tap or BOOT skips, and the skipping finger is not passed
+  on as a tap) -> home screen. Wi-Fi keeps connecting in the background throughout.
+- The sound plays through the Rumours player plumbing (`rumPcm`, `rumBusy`/`rumStop`) on core 0;
+  decoded on the PC with the badge's decoder: 195 frames, 7.02 s, no errors.
+- Build: **3,020,147 bytes** (64% of the app partition).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

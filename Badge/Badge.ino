@@ -870,7 +870,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v2.9 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, settings ===");
+  Serial.println("=== Thanks Danny badge v3.0 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, settings ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -879,6 +879,8 @@ void setup() {
   gfx->flush();
   uint32_t flushMs = millis() - f0;
   panel->setBrightness(170);                   // the panel's own command, not the canvas's
+  void showStartupSplash();                    // Startup.ino: the power-on picture, at once
+  showStartupSplash();
   Serial.printf("panel  : CO5300 up, %dx%d round (visible circle r=%d), QSPI %d MHz, full frame %lu ms\n",
                 LCD_WIDTH, LCD_HEIGHT, PANEL_R, LCD_QSPI_HZ / 1000000, (unsigned long)flushMs);
 
@@ -924,6 +926,9 @@ void setup() {
     Serial.println("! touch init FAILED - the cog will not respond");
   }
 
+  void startupSoundStart();                    // Startup.ino: needs the I2C bus, so after touch
+  startupSoundStart();
+
   loadCredentials();
   if (wifiSSID.length()) {
     beginConnect();                     // connect first; the AP only comes up if this fails
@@ -933,6 +938,8 @@ void setup() {
     startSetupAP();
   }
 
+  void startupWait();                          // Startup.ino: until the sound ends (tap skips)
+  startupWait();
   showScreen(ST_HOME);
   Serial.printf("touch  : polled every %d ms, tap guard %d ms\n", POLL_MS, TAP_GUARD_MS);
   Serial.println("ready");
