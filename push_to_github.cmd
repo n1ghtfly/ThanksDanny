@@ -36,9 +36,14 @@ if exist "github-pics\.git" (
 )
 
 echo.
+echo --- getting any changes already on GitHub (e.g. pushed by Claude) ---
+git pull --rebase --autostash origin main
+if errorlevel 1 goto fail
+
+echo.
 echo --- committing ---
 git add -A
-git diff --cached --quiet && (echo   nothing new to commit) || git commit -q -F tools\commit_message.txt
+git diff --cached --quiet && (echo   nothing new to commit) || git commit -q -m "Update from the PC"
 if errorlevel 1 goto fail
 git log --oneline -1
 
