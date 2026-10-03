@@ -28,7 +28,7 @@
  *                   (both inside the circle), the Pictures button under the sign, and a
  *                   status pill inside the bottom of the circle
  *   Coin -> Decider : a coin toss that lands on Approved / Disapproved by Danny (Decider.ino)
- *   Cog -> menu   : "Wi-Fi setup on phone", "Touch test", "Close"
+ *   Settings      : "Wi-Fi setup on phone", "Close" (v2.9: Pictures and Touch test removed)
  *   Wi-Fi setup   : when the badge has no working network it raises its OWN access point and
  *                   serves a small web page. Join that AP from a phone, pick your Wi-Fi from
  *                   a scanned list, type the password on the phone's keyboard, and the badge
@@ -152,10 +152,10 @@ static const char *APP_NAME[APP_COUNT] = { "PICTURES", "DECIDER", "RUMOURS", "SE
 // y=120 and the bottom of the safe area, so they are shorter than they were back at three.
 #define ROW_X 63
 #define ROW_W 340
-#define ROW_H 57
-#define ROW_Y0 120
-#define ROW_GAP 8
-#define ROW_COUNT 4
+#define ROW_H 64
+#define ROW_Y0 150
+#define ROW_GAP 10
+#define ROW_COUNT 2                       // v2.9: Wi-Fi setup + Close (Pictures and Touch test removed)
 
 // Gallery.ino (the picture app) is concatenated AFTER this file, so its globals are not yet
 // declared here. This file's JPEG callback needs to know when the gallery wants blocks packed
@@ -165,14 +165,10 @@ extern int       decDestW;
 bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, uint16_t h,
                  uint16_t *bitmap);
 
-// Touch test targets, comfortably inside the circle.
-static const int MARK[4][2] = {{120, 130}, {346, 130}, {120, 336}, {346, 336}};
-
 // ------------------------------------------------------------------ screens
 #define ST_HOME         0
 #define ST_MENU         1
 #define ST_APINFO       2
-#define ST_TOUCHTEST    3
 // The gallery's screen ids live here rather than in Gallery.ino: Arduino concatenates this
 // file FIRST, so anything this file references must be declared above it.
 #define ST_GALLERY      4
@@ -227,7 +223,7 @@ static String apAddress  = "192.168.4.1";
 static String scanList[MAX_SCAN];        // cached scan: see the note about AP mode above
 static int    scanCount  = 0;
 
-// Timings, shown on the touch test screen so responsiveness can be measured on the glass
+// Timings, logged per tap so responsiveness can be measured rather than argued about
 // rather than argued about. Written every tap.
 static uint32_t lastReadUs = 0;          // one controller read
 static uint32_t lastActMs  = 0;          // tap detected -> response finished
@@ -446,28 +442,16 @@ void drawMenu() {
   centred(26, "Settings", 3, RGB565_WHITE);
   gfx->drawFastHLine(ROW_X, 78, ROW_W, RGB565(60, 60, 72));
 
+  // v2.9: only settings live here. Pictures is on the home carousel; the touch test is gone.
   int y = ROW_Y0;
-
-  // Pictures first: it is the app, the rest are settings.
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
   gfx->setTextSize(2);
   gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 9);
-  gfx->print("Pictures");
-  gfx->setTextSize(1);
-  gfx->setTextColor(RGB565(150, 200, 255));
-  gfx->setCursor(ROW_X + 18, y + 31);
-  gfx->print("random pictures from GitHub, tap = next");
-
-  y += ROW_H + ROW_GAP;
-  button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 9);
+  gfx->setCursor(ROW_X + 18, y + 12);
   gfx->print("Wi-Fi setup on phone");
   gfx->setTextSize(1);
   gfx->setTextColor(RGB565(150, 200, 255));
-  gfx->setCursor(ROW_X + 18, y + 31);
+  gfx->setCursor(ROW_X + 18, y + 38);
   if (WiFi.status() == WL_CONNECTED)      gfx->printf("connected: %s", WiFi.localIP().toString().c_str());
   else if (wifiSSID.length())             gfx->printf("saved: %s (not connected)", wifiSSID.c_str());
   else                                    gfx->print("no network saved yet - pictures need this");
@@ -476,18 +460,7 @@ void drawMenu() {
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
   gfx->setTextSize(2);
   gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 9);
-  gfx->print("Touch test");
-  gfx->setTextSize(1);
-  gfx->setTextColor(RGB565(150, 200, 255));
-  gfx->setCursor(ROW_X + 18, y + 31);
-  gfx->printf("check where taps land (%lu seen)", touchSeen);
-
-  y += ROW_H + ROW_GAP;
-  button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 19);
+  gfx->setCursor(ROW_X + 18, y + 24);
   gfx->print("Close");
 
   Serial.printf("ui     : settings (%d rows, last ends at y=%d)\n", ROW_COUNT, y + ROW_H);
@@ -530,41 +503,6 @@ void drawAPInfo() {
                 AP_SSID, apAddress.c_str(), scanCount);
 }
 
-void drawTouchTest() {
-  gfx->fillScreen(RGB565_BLACK);
-  centred(24, "Touch test", 2, RGB565_WHITE);
-  for (int i = 0; i < 4; i++) {
-    gfx->drawCircle(MARK[i][0], MARK[i][1], 22, RGB565(90, 200, 255));
-    gfx->drawFastHLine(MARK[i][0] - 26, MARK[i][1], 52, RGB565(90, 200, 255));
-    gfx->drawFastVLine(MARK[i][0], MARK[i][1] - 26, 52, RGB565(90, 200, 255));
-  }
-  centred(236, "tap the four circles", 1, RGB565(180, 180, 190));
-
-  // Raw coordinates of the last tap, drawn big on the glass. If the mapping is wrong these
-  // numbers will not match where the finger went - and that is the answer.
-  gfx->fillRoundRect(PILL_X, 292, PILL_W, 44, 12, RGB565(14, 14, 20));
-  gfx->drawRoundRect(PILL_X, 292, PILL_W, 44, 12, RGB565(90, 90, 110));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565(255, 220, 120));
-  gfx->setCursor(PILL_X + 16, PILL_Y - 82);
-  gfx->print("tap: none yet");
-
-  // Responsiveness, measured on the device. First number is one controller read; second is
-  // the whole tap-to-response path. If the badge feels slow, read these off and they say why.
-  char perf[48];
-  snprintf(perf, sizeof(perf), "read %lu us / act %lu ms", lastReadUs, lastActMs);
-  centred(270, perf, 1, RGB565(140, 140, 155));
-
-  button(PILL_X, PILL_Y, PILL_W, PILL_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(PILL_X + 16, PILL_Y + 14);
-  gfx->print("Back");
-
-  Serial.printf("ui     : touch test - tap the four circles (read %lu us, act %lu ms)\n",
-                lastReadUs, lastActMs);
-}
-
 void showScreen(int s) {
   void rumoursStop();                          // Rumours.ino
   if (s != ST_RUMOURS) rumoursStop();          // leaving Rumours silences it
@@ -574,7 +512,6 @@ void showScreen(int s) {
     case ST_HOME:         drawHome();         break;
     case ST_MENU:         drawMenu();         break;
     case ST_APINFO:       drawAPInfo();       break;
-    case ST_TOUCHTEST:    drawTouchTest();    break;
     case ST_GALLERY:      showGallery();      return;  // Gallery.ino; flushes its own frames
     case ST_GALLERY_SYNC: drawGallerySync();  return;  // flushes itself (and not when quiet)
     case ST_DECIDER:      showDecider();      return;  // Decider.ino; animates, flushes itself
@@ -729,11 +666,10 @@ void handleTap(int16_t x, int16_t y) {
 
   // Acknowledge before working. The screen change itself can take ~350 ms on this panel.
   if (screen == ST_MENU && x >= ROW_X && x <= ROW_X + ROW_W) {
-    int y1 = ROW_Y0, y2 = ROW_Y0 + ROW_H + ROW_GAP, y3 = y2 + ROW_H + ROW_GAP;
+    int y1 = ROW_Y0, y2 = ROW_Y0 + ROW_H + ROW_GAP;
     if (y >= y1 && y <= y1 + ROW_H)       ackRow(y1);
     else if (y >= y2 && y <= y2 + ROW_H)  ackRow(y2);
-    else if (y >= y3 && y <= y3 + ROW_H)  ackRow(y3);
-  } else if (screen == ST_APINFO || screen == ST_TOUCHTEST) {
+  } else if (screen == ST_APINFO) {
     if (x >= PILL_X && x <= PILL_X + PILL_W && y >= PILL_Y && y <= PILL_Y + PILL_H)
       gfx->drawRoundRect(PILL_X - 3, PILL_Y - 3, PILL_W + 6, PILL_H + 6, 16, RGB565(150, 230, 255));
   }
@@ -754,13 +690,8 @@ void handleTap(int16_t x, int16_t y) {
   if (screen == ST_MENU) {
     int y1 = ROW_Y0;
     int y2 = y1 + ROW_H + ROW_GAP;
-    int y3 = y2 + ROW_H + ROW_GAP;
-    int y4 = y3 + ROW_H + ROW_GAP;
     if (x >= ROW_X && x <= ROW_X + ROW_W) {
       if (y >= y1 && y <= y1 + ROW_H) {
-        Serial.println("         -> menu: pictures (fetch if needed, then scroll)");
-        showScreen(ST_GALLERY);
-      } else if (y >= y2 && y <= y2 + ROW_H) {
         // Use the scan cached at boot. Rescanning here measured 3363 ms on the tap path -
         // the single worst delay in the UI - and the list only changes when networks do.
         // Say something immediately anyway: an acked tap must never look ignored.
@@ -772,9 +703,7 @@ void handleTap(int16_t x, int16_t y) {
         Serial.println("         -> menu: wi-fi setup (cached scan, then raise the AP)");
         startSetupAP();
         showScreen(ST_APINFO);
-      } else if (y >= y3 && y <= y3 + ROW_H) {
-        Serial.println("         -> menu: touch test"); showScreen(ST_TOUCHTEST);
-      } else if (y >= y4 && y <= y4 + ROW_H) {
+      } else if (y >= y2 && y <= y2 + ROW_H) {
         Serial.println("         -> menu: close");      showScreen(ST_HOME);
       }
     }
@@ -823,33 +752,6 @@ void handleTap(int16_t x, int16_t y) {
     return;
   }
 
-  if (screen == ST_TOUCHTEST) {
-    if (x >= PILL_X && x <= PILL_X + PILL_W && y >= PILL_Y && y <= PILL_Y + PILL_H) {
-      Serial.println("         -> back"); showScreen(ST_MENU);
-      lastActMs = millis() - t0;
-      return;
-    }
-    // Mark where the tap landed, so a wrong mapping is visible on the panel, not just in a log.
-    gfx->fillCircle(x, y, 6, RGB565(255, 90, 90));
-    gfx->drawCircle(x, y, 11, RGB565_WHITE);
-
-    // Replace the placeholder with the live numbers: read them off the glass and they say
-    // exactly how the controller's frame differs from the panel's.
-    gfx->fillRoundRect(PILL_X + 2, 294, PILL_W - 4, 40, 10, RGB565(14, 14, 20));
-    gfx->drawRoundRect(PILL_X, 292, PILL_W, 44, 12, RGB565(90, 90, 110));
-    gfx->setTextSize(2);
-    gfx->setTextColor(RGB565(255, 220, 120));
-    gfx->setCursor(PILL_X + 16, PILL_Y - 82);
-    gfx->printf("x=%d y=%d", x, y);
-    for (int i = 0; i < 4; i++) {
-      int dx = x - MARK[i][0], dy = y - MARK[i][1];
-      if (dx * dx + dy * dy <= 26 * 26) {
-        Serial.printf("         -> landed inside circle %d\n", i + 1);
-        break;
-      }
-    }
-    gfx->flush();
-  }
   lastActMs = millis() - t0;
 }
 
@@ -968,7 +870,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v2.8 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, settings ===");
+  Serial.println("=== Thanks Danny badge v2.9 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, settings ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

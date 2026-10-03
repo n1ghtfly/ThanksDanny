@@ -374,6 +374,12 @@ the bottom like the Decider; tap anywhere else for another one; leaving the scre
   never starts with the one that just played.
 - Build: **2,544,003 bytes** (53%), globals 22%.
 
+## v2.9 - shorter Settings menu
+
+Settings now has two rows: **Wi-Fi setup on phone** and **Close** (taller, centred in the circle).
+**Pictures** was removed from it (it is on the home carousel) and the **Touch test** screen was
+removed from the firmware altogether; tap timings are still logged on serial. Build 2,542,855 bytes.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

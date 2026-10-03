@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v2.8, 3 Oct 2026)
+# Thanks Danny badge - project index (v2.9, 3 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v2.8)
+## What the badge does (v2.9)
 
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
   page dots, and a name + Wi-Fi pill. Swipe left/right to move, tap the middle icon to open it,
@@ -17,7 +17,7 @@ measurements); this page is the map.
 - **Rumours**: plays a random rumour clip (AI voice parody) from the same GitHub Pages site,
   with the speaker's name and live sound bars. AGAIN | HOME.
 - **Settings**: Wi-Fi setup on the phone (the badge raises its own `ThanksDanny-setup`
-  network), touch test, close.
+  network), close.
 - **BOOT button**: back to the home screen from anywhere.
 
 ## Layout
@@ -46,7 +46,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v2.8 build: 2,544,003 bytes (53% of the app partition), globals 22%
+- v2.9 build: 2,542,855 bytes (53% of the app partition), globals 22%
 
 ## Restore from scratch (new PC, or a wiped board)
 
