@@ -41,7 +41,14 @@ def connect(a, on_message=None, subs=()):
     c.on_connect = on_connect
     if on_message:
         c.on_message = on_message
-    c.connect(a.host, a.port, keepalive=30)
+    try:
+        c.connect(a.host, a.port, keepalive=30)
+    except ConnectionRefusedError:
+        sys.exit(f"! {a.host}:{a.port} refused the connection - nothing is listening on that port.\n"
+                 f"  Home test without a certificate? Add:  --port 1883 --no-tls\n"
+                 f"  Otherwise check Mosquitto is running:  docker logs mosquitto --tail 30")
+    except (TimeoutError, OSError) as e:
+        sys.exit(f"! cannot reach {a.host}:{a.port} ({e}). Check the host name and that you are on the same network.")
     c.loop_start()
     for _ in range(100):
         if state["ok"] is not None:
