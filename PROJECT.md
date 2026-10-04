@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.4, 4 Oct 2026)
+# Thanks Danny badge - project index (v3.5, 4 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.4)
+## What the badge does (v3.5)
 
 - **Startup**: a picture and a short sound at power-on, then the home screen (tap to skip).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
@@ -27,6 +27,15 @@ measurements); this page is the map.
   while that badge is offline; $SLAP is the real slap count. After 5 more minutes the panel sleeps. A tap,
   BOOT or an incoming slap wakes it (moving the badge does not), back on the screen you left.
 - **BOOT button**: back to the home screen from anywhere.
+
+## Changing the pictures and rumours
+
+1. Pictures: add or delete files in `Downloads\ThanksDanny\pics` (jpg/png, any size, max 40).
+   Rumours: add or delete files in `Downloads\ThanksDanny\mp3` (`[Speaker name] whatever.mp3`, max 24).
+2. Double-click **`update_badge_content.cmd`**: it converts everything for the badge, rebuilds the lists
+   and publishes the site (needs Python + Pillow, and ffmpeg for the rumours).
+3. Wait a minute or two for GitHub Pages, then restart the badges. They download what is new and delete
+   what you removed.
 
 ## Layout
 
@@ -58,7 +67,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.4 build: 3,114,911 bytes (65% of the app partition), globals 23%
+- v3.5 build: 3,116,427 bytes (65% of the app partition), globals 23%
 
 ## Restore from scratch (new PC, or a wiped board)
 

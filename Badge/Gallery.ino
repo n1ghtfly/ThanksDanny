@@ -449,7 +449,37 @@ void syncPictures() {
   syncDone = picCount;
   syncState = 3;
   syncNote = "up to date";
+  int gone = pruneDir(PICS_DIR, picFile, picCount, nullptr);   // pictures taken off the site
   Serial.println("gallery: cache up to date");
+  if (gone) Serial.printf("gallery: removed %d picture(s) no longer on the site\n", gone);
+}
+
+// Delete every file in `dir` that is not in keep[] (and not `alsoKeep`), so something removed
+// from the site also leaves the badge - otherwise it would linger in flash and still turn up
+// offline. Names are collected first: deleting while walking a LittleFS directory skips entries.
+// Used by Pictures and Rumours, only after a list was fetched and parsed, never when offline.
+int pruneDir(const char *dir, const String *keep, int nkeep, const char *alsoKeep) {
+  File d = LittleFS.open(dir);
+  if (!d || !d.isDirectory()) return 0;
+  String doomed[48];
+  int n = 0;
+  for (File e = d.openNextFile(); e && n < 48; e = d.openNextFile()) {
+    String name = e.name();
+    bool isDir = e.isDirectory();
+    e.close();
+    int slash = name.lastIndexOf('/');
+    if (slash >= 0) name = name.substring(slash + 1);
+    if (isDir || (alsoKeep && name == alsoKeep)) continue;
+    bool listed = false;
+    for (int k = 0; k < nkeep && !listed; k++) listed = (keep[k] == name);
+    if (!listed) doomed[n++] = name;
+  }
+  d.close();
+  for (int i = 0; i < n; i++) {
+    String path = String(dir) + "/" + doomed[i];
+    Serial.printf("fs     : removing %s (%s)\n", path.c_str(), LittleFS.remove(path) ? "ok" : "FAILED");
+  }
+  return n;
 }
 
 // Count what is on the filesystem without the network, so the app works offline.

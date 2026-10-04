@@ -475,6 +475,18 @@ Moving the badge (walking with it on a lanyard) kept waking the screensaver. It 
 screen touch or the BOOT button - and an incoming slap still takes over the screen as before.
 Build: **3,114,911 bytes** (66%).
 
+## v3.5 - removing pictures and rumours actually removes them; one-click update
+
+- Before, the badge only ever added: a picture or rumour taken off the site was no longer listed, but its
+  file stayed in flash (wasting space) and a removed picture could still appear when offline. Now, after a
+  successful list fetch, Pictures and Rumours delete every cached file that is not on the list
+  (`pruneDir()` in `Gallery.ino`). Never when offline or when the list fetch failed.
+- `tools/prep_github_pics.py` deletes old `pNN.jpg` files from `github-pics\` that no longer correspond to
+  a source picture, so the site holds exactly the current set.
+- **`update_badge_content.cmd`**: prep pictures, prep rumours (skipped with a note if ffmpeg is missing),
+  publish. `push_pictures_site.cmd`'s commit message is now generic.
+- Build: **3,116,427 bytes** (66%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

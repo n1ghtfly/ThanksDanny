@@ -10,13 +10,14 @@ git config user.name >nul 2>nul || git config user.name "n1ghtfly"
 git config user.email >nul 2>nul || git config user.email "n1ghtfly@users.noreply.github.com"
 
 git add -A
-git diff --cached --quiet && (echo   nothing new to publish) || git commit -q -m "Rumours: AI voice parody clips for the badge's Rumours app"
+git diff --cached --quiet && (echo   nothing new to publish) || git commit -q -m "Update the badge pictures and rumours"
 if errorlevel 1 goto fail
 git push
 if errorlevel 1 goto fail
 echo.
-echo   Published. Check: https://n1ghtfly.github.io/danny-pics-7f3c9a/rumours/rumours.txt
-echo   (give GitHub Pages a minute or two), then restart the badge or open Rumours.
+echo   Published. Check: https://n1ghtfly.github.io/danny-pics-7f3c9a/list.txt
+echo   (give GitHub Pages a minute or two), then restart the badge: it fetches new pictures
+echo   and rumours at start-up and deletes the ones you removed.
 echo.
 pause
 exit /b 0

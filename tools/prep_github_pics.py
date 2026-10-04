@@ -100,6 +100,14 @@ def prep(src, out):
         })
         print(f"  {name:42s} {w0}x{h0}  ->  {out_name}  {cw}x{ch}  {kb} kB  baseline")
 
+    # Pictures removed from the source folder: delete their old pNN.jpg too, so the site holds
+    # exactly the current set (the badge then deletes them from its flash on its next sync).
+    keep = {e["file"] for e in entries}
+    for old in sorted(os.listdir(out)):
+        if old.lower().startswith("p") and old.lower().endswith(".jpg") and old not in keep:
+            os.remove(os.path.join(out, old))
+            print(f"  removed old {old}")
+
     manifest = {"panel": 466, "count": len(entries), "pictures": entries}
     man_path = os.path.join(out, "manifest.json")
     with open(man_path, "w", encoding="utf-8") as fh:

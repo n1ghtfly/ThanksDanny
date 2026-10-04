@@ -137,6 +137,8 @@ int rumoursSync(bool quiet) {
     if (now == rumBytes[n]) ready++;
   }
   Serial.printf("rumours: %d of %d clip(s) on the badge\n", ready, rumCount);
+  int gone = pruneDir(RUM_DIR, rumFile, rumCount, "rumours.txt");   // Gallery.ino
+  if (gone) Serial.printf("rumours: removed %d clip(s) no longer on the site\n", gone);
   return ready;
 }
 
