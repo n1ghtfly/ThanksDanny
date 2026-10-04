@@ -340,6 +340,7 @@ void showDecider() {
     if (decBootHome()) return;
     delay(10);
   }
+  if (!decResult) nopeDrawCard();                    // Nope.ino: Danny's official reason (v3.7)
   decDrawPill();
   flushRect(DEC_PILL_X - 4, DEC_PILL_Y - 4, DEC_PILL_W + 8, DEC_PILL_H + 8);
   Serial.println("decider: result up - tap to toss again, HOME or BOOT for the main screen");

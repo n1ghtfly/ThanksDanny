@@ -13,19 +13,25 @@ cd /d "%~dp0"
 where python >nul 2>nul || (echo   Python is not installed: https://www.python.org/downloads/ & pause & exit /b 1)
 
 echo.
-echo === 1/3  Pictures (Downloads\ThanksDanny\pics)
+echo === 1/4  Pictures (Downloads\ThanksDanny\pics)
 python tools\prep_github_pics.py
 if errorlevel 1 goto fail
 
 echo.
-echo === 2/3  Rumours (Downloads\ThanksDanny\mp3)
-where ffmpeg >nul 2>nul || (echo   ffmpeg is not installed - skipping the rumours, pictures still go out & goto publish)
+echo === 2/4  Rumours (Downloads\ThanksDanny\mp3)
+where ffmpeg >nul 2>nul || (echo   ffmpeg is not installed - skipping the rumours, pictures still go out & goto excuses)
 python tools\prep_rumours.py
 if errorlevel 1 goto fail
 
+:excuses
+echo.
+echo === 3/4  Danny's excuses for the Decider (from No-as-a-Service)
+python tools\prep_no_reasons.py
+if errorlevel 1 echo   could not fetch the excuses - the badges keep the ones they have
+
 :publish
 echo.
-echo === 3/3  Publish
+echo === 4/4  Publish
 call "%~dp0push_pictures_site.cmd"
 exit /b 0
 

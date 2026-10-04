@@ -915,6 +915,7 @@ static void contentSyncTask(void *) {
   galleryBootFetch();
   void rumoursBootFetch();
   rumoursBootFetch();
+  nopeSync();                                    // Nope.ino: Danny's reasons
   Serial.printf("sync   : background update done in %lu ms\n", (unsigned long)(millis() - t0));
   contentBusy = false;
   vTaskDelete(nullptr);
@@ -925,6 +926,7 @@ void contentSyncStart() {
   if (!LittleFS.exists(PICS_DIR)) {               // first boot: in front, with progress
     galleryBootFetch();
     rumoursBootFetch();
+    nopeSync();                                    // Nope.ino: Danny's reasons
     return;
   }
   contentBusy = true;
@@ -933,6 +935,7 @@ void contentSyncStart() {
     Serial.println("sync   : ! no task - updating in the foreground");
     galleryBootFetch();
     rumoursBootFetch();
+    nopeSync();                                    // Nope.ino: Danny's reasons
     return;
   }
   Serial.println("sync   : checking for new pictures and rumours in the background");

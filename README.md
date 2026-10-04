@@ -502,6 +502,22 @@ Build: **3,114,911 bytes** (66%).
   Expected for app openings and animations; anything on the home screen with no tap before it is a lead.
 - Build: **3,117,299 bytes** (66%).
 
+## v3.7 - Danny's official reason (No-as-a-Service)
+
+`preview_nope.png`. When the Decider lands on DISAPPROVED, after the usual 1.2 s an **OFFICIAL REASON**
+card slides up over the bottom of the badge (the thumb and QUALITY CONTROL, not Danny's face), above
+AGAIN | HOME.
+
+- Reasons: [No-as-a-Service](https://github.com/hotheadhacker/no-as-a-service) (MIT, (c) 2026 hotheadhacker).
+  `tools/prep_no_reasons.py` downloads its `reasons.json`, straightens curly quotes/dashes for the ASCII
+  font and keeps those that fit the card (4 lines x 24 characters, wrapped at spaces exactly like the
+  badge): 955 of 1055. Output `github-pics/no/reasons.txt` (56 kB) + `no/index.txt` (its byte size).
+- The badge never calls their API: the background update fetches `no/index.txt` and downloads
+  `reasons.txt` into `/no/` only when the size changed (`nopeSync()` in `Badge/Nope.ino`). Picking one is a
+  random seek + next line - instant and offline. Five built-in reasons cover the time before the first download.
+- `update_badge_content.cmd` has a step for it (3/4).
+- Build: **3,119,667 bytes** (66%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
