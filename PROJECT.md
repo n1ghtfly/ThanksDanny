@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.1, 3 Oct 2026)
+# Thanks Danny badge - project index (v3.2, 4 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.1)
+## What the badge does (v3.2)
 
 - **Startup**: a picture and a short sound at power-on, then the home screen (tap to skip).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
@@ -21,13 +21,16 @@ measurements); this page is the map.
   hand, a shake and a sound; SLAP BACK. Through your own Mosquitto (see `server/mosquitto/`).
 - **Settings**: Wi-Fi setup on the phone (the badge raises its own `ThanksDanny-setup`
   network; also the badge network login), this badge's name, slap sound on/off, close.
+- **Screensaver**: after 1 minute without a touch the badge dims to a drifting clock, the date and
+  who is online (C D W); after 5 more minutes the panel sleeps. A tap, BOOT, picking the badge up or
+  an incoming slap wakes it, back on the screen you left.
 - **BOOT button**: back to the home screen from anywhere.
 
 ## Layout
 
 | Folder / file | What it is |
 |---|---|
-| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, carousel, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Startup.ino` (power-on splash), `Sos.ino` (badge network + Slap), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
+| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, carousel, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Startup.ino` (power-on splash), `Sos.ino` (badge network + Slap), `Screensaver.ino` (idle clock), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
 | `tools/flash_badge.cmd` | Double-click: clean build + upload + boot log. |
 | `tools/prep_decider.py` | `assets/chooser` badges -> `Badge/decider_assets.h` |
 | `tools/prep_decider_sound.py` | `assets/chooser/drummroll.mp3` -> `Badge/decider_sound.h` (needs ffmpeg) |
@@ -53,7 +56,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.1 build: 3,110,631 bytes (65% of the app partition), globals 23%
+- v3.2 build: 3,112,971 bytes (65% of the app partition), globals 23%
 
 ## Restore from scratch (new PC, or a wiped board)
 

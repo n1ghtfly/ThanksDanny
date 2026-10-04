@@ -536,6 +536,7 @@ void drawAPInfo() {
 }
 
 void showScreen(int s) {
+  if (saverIntercept(s)) return;               // Screensaver.ino: a hidden refresh, or a wake-up
   void rumoursStop();                          // Rumours.ino
   if (s != ST_RUMOURS) rumoursStop();          // leaving Rumours silences it
   screen = s;
@@ -868,6 +869,7 @@ void pollTouch() {
 
   if (n > 0) {
     tLastSeen = now;
+    saverPoke();                             // Screensaver.ino: a finger on the glass = not idle
     if (!touchDown) {
       touchDown = true;
       tDownAt = now;
@@ -918,7 +920,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.1 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, slap, settings ===");
+  Serial.println("=== Thanks Danny badge v3.2 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -993,19 +995,27 @@ void setup() {
   void startupWait();                          // Startup.ino: until the sound ends (tap skips)
   startupWait();
   showScreen(ST_HOME);
+  saverPoke();                                 // the idle clock starts at the home screen
   Serial.printf("touch  : polled every %d ms, tap guard %d ms\n", POLL_MS, TAP_GUARD_MS);
   Serial.println("ready");
 }
 
 void loop() {
   server.handleClient();               // only does anything while the setup AP is up
-  pollTouch();                         // cheap: ~2 ms per read, so it runs at ~200 Hz
 
-  // The BOOT button is the way back to the main screen from anywhere: one press, always the
-  // same destination, no hunting for a control on a round panel.
-  if (bootButtonHit() && screen != ST_HOME) {
-    Serial.println("btn    : BOOT pressed -> main screen");
-    showScreen(ST_HOME);
+  if (saverActive()) {
+    saverLoop();                       // Screensaver.ino: tap / BOOT / lift wakes it, clock ticks
+  } else {
+    pollTouch();                       // cheap: ~2 ms per read, so it runs at ~200 Hz
+
+    // The BOOT button is the way back to the main screen from anywhere: one press, always the
+    // same destination, no hunting for a control on a round panel.
+    bool boot = bootButtonHit();
+    if (boot) saverPoke();
+    if (boot && screen != ST_HOME) {
+      Serial.println("btn    : BOOT pressed -> main screen");
+      showScreen(ST_HOME);
+    }
   }
 
   if (connecting) {
@@ -1016,8 +1026,10 @@ void loop() {
       // TLS needs a sane clock. This board has no RTC, so without SNTP it thinks it is 1970 and
       // every certificate in the CA bundle looks "not yet valid" - which shows up as a download
       // that simply never happens. Ask for the correct time once per boot.
-      configTime(0, 0, "pool.ntp.org", "time.google.com");
-      Serial.println("time   : asked SNTP for the correct time");
+      // v3.2: with the Amsterdam time zone, so the screensaver clock shows local time (summer
+      // time included). TLS only looks at the absolute time, which the zone does not change.
+      configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");
+      Serial.println("time   : asked SNTP for the correct time (Europe/Amsterdam)");
       Serial.println("ap     : tearing down the setup network");
       WiFi.softAPdisconnect(true);
       apRunning = false;
@@ -1041,8 +1053,9 @@ void loop() {
       if (screen == ST_APINFO) showScreen(ST_APINFO);
     }
   }
-  if (screen == ST_RUMOURS) { void rumoursTick(); rumoursTick(); }   // the sound bars
+  if (screen == ST_RUMOURS && !saverActive()) { void rumoursTick(); rumoursTick(); }   // sound bars
   void sosPoll(); sosPoll();                                          // badge network: slaps, presence
-  if (screen == ST_SLAP) { void sosTick(); sosTick(); }              // swing detection
+  if (screen == ST_SLAP && !saverActive()) { void sosTick(); sosTick(); }   // swing detection
+  if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
   delay(POLL_MS);
 }

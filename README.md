@@ -432,6 +432,25 @@ The badges (Claudio, Danny, Walter) now talk to each other through your own Mosq
   tested against the broker above.
 - Build: **3,110,631 bytes** (65%), globals 23%.
 
+## v3.2 - screensaver
+
+`Badge/Screensaver.ino`; `preview_screensaver.png` shows it.
+
+- After **60 s without a touch** on a quiet screen (home, settings, a picture, a decider result, a slap you
+  got, Rumours when silent, SLAP while picking) the panel dims to 40/255 and shows a black screen with a
+  seven-segment clock, the date and a dot per member (lit = online). The block moves to a random spot
+  within +-30 px every minute, so nothing burns into the AMOLED. After **5 more minutes** the panel sleeps
+  (DISPOFF + SLPIN).
+- **Wakes** on a tap (swallowed: it does not also press what is under it), BOOT, picking the badge up
+  (gyro over 120 dps) or an incoming slap (which then takes over as usual). The screen that was up is
+  copied to PSRAM when the saver starts and copied back on wake, so every app comes back exactly as it was.
+- Refreshes that arrive while it is up (presence changes, Wi-Fi coming up) are noted and the screen is
+  redrawn on wake instead of restored.
+- The clock is local time: SNTP is now asked with the Europe/Amsterdam zone (`configTzTime`), summer time
+  included. Before Wi-Fi has set the clock it shows "zzz".
+- Tunables at the top of `Screensaver.ino`: `SAVER_AFTER_MS`, `SAVER_OFF_MS`, `SAVER_BRIGHT`, `SAVER_WAKE_DPS`.
+- Build: **3,112,971 bytes** (65%), globals 23%.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

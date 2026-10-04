@@ -149,6 +149,11 @@ int sosOnlineCount() {
   return n;
 }
 
+// For the screensaver: is member i online (this badge counts while it is connected)?
+bool sosIsOnline(int i) { return i >= 0 && i < SOS_N && (sosOnline[i] || (i == sosMe && sosnet_connected())); }
+// SLAP is just showing the victims (not armed, not showing a result).
+bool slapIdle() { return slapState == SLAP_PICK; }
+
 // ---------------------------------------------------------------- motion
 
 void sosImuBegin() {
