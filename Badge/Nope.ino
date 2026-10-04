@@ -1,5 +1,5 @@
 /*
- * Nope (v3.7) - Danny's official reasons for saying no.
+ * Nope (v3.7, v3.8) - Danny's official reasons for saying no (and, since v3.8, for saying yes).
  *
  * When the Decider lands on DISAPPROVED, a card slides over the bottom of the badge:
  *   OFFICIAL REASON:
@@ -75,15 +75,64 @@ void nopeReason(char *out, int n) {
   }
 }
 
-// The card over the bottom of the DISAPPROVED badge (Decider.ino calls this before the pill).
+static const char *YES_REASONS[] = {     // your list (v3.8): shown when Danny approves
+  "Consider me fully on board.",
+  "I was practically waiting for you to ask - count me in.",
+  "My inner peace committee reviewed the proposal and approved it unanimously.",
+  "Future Me just sent a thank-you note for saying yes to this.",
+  "Every fiber of my being just gave a standing ovation.",
+  "Saying yes to this is the easiest decision I'll make all week.",
+  "You had me at hello, but the rest sounds fantastic too.",
+  "I just checked my calendar and cleared a runway specifically for this.",
+  "My enthusiasm is 100% genuine and my availability is completely real.",
+  "The stars, my schedule, and my mood have aligned: absolutely.",
+  "This passes the vibe check with flying colors.",
+  "I would climb Mount Everest barefoot to be part of this.",
+  "Sign me up before you change your mind.",
+  "If saying yes is wrong, I don't want to be right.",
+  "I'm all in - hook, line, and sinker.",
+  "My couch gave me permission to leave just for this.",
+  "I ran the numbers and saying yes is mathematically optimal.",
+  "My gut feeling just did a celebratory dance: let's do it.",
+  "This is precisely what I needed on my plate today.",
+  "I've got both hands raised and I'm ready to roll.",
+  "Wild horses couldn't drag me away from this opportunity.",
+  "A resounding, enthusiastic, unhesitating yes from my end.",
+  "Consider your request granted with zero fine print.",
+  "My Wi-Fi of motivation just hit gigabit speeds for this.",
+  "I'm in, and I brought snacks.",
+  "This aligns perfectly with where I want to spend my energy.",
+  "Saying yes to this just cured my fatigue.",
+  "I couldn't say no to this even if I practiced in the mirror.",
+  "My calendar just high-fived me for putting this on it.",
+  "I'm already mentally at the starting line.",
+  "You didn't even have to finish the sentence - I'm down.",
+  "Let's make it happen.",
+  "The multiverse converged on a timeline where I say an emphatic yes.",
+  "I'm volunteering as tribute - gladly.",
+  "My response is freshly baked, warm, and a solid yes.",
+  "I'm putting on real pants for this; that's how committed I am.",
+  "Count me present, accounted for, and ready.",
+  "This is a 10/10 idea and I want front-row seats.",
+  "My to-do list just welcomed this with open arms.",
+  "Yes, without an ounce of hesitation or regret.",
+};
+#define YES_N (int)(sizeof(YES_REASONS) / sizeof(YES_REASONS[0]))
+
+// The card over the bottom of the result badge (Decider.ino calls this before the pill): an
+// excuse in red on DISAPPROVED, one of YES_REASONS in green on APPROVED.
 // Kept inside the round glass: the corners at x 80/386, y 404 are 229 px from the centre.
 #define NOPE_X 80
 #define NOPE_Y 294
 #define NOPE_W 306
 #define NOPE_H 110
-void nopeDrawCard() {
+void nopeDrawCard(bool approved) {
   char reason[160];
-  nopeReason(reason, sizeof(reason));
+  if (approved) snprintf(reason, sizeof(reason), "%s", YES_REASONS[esp_random() % YES_N]);
+  else          nopeReason(reason, sizeof(reason));
+  const uint16_t *badge = approved ? DEC_POS : DEC_NEG;
+  const uint16_t edge = approved ? RGB565(60, 200, 90) : RGB565(230, 60, 60);
+  const uint16_t head = approved ? RGB565(110, 235, 130) : RGB565(255, 90, 90);
 
   // Word-wrap to NOPE_COLS (the prep script only keeps reasons that fit in NOPE_ROWS lines).
   char lines[NOPE_ROWS][NOPE_COLS + 1];
@@ -114,15 +163,15 @@ void nopeDrawCard() {
   for (int f = 1; f <= frames; f++) {
     float t = (float)f / frames;
     int y = NOPE_Y + (int)((1.0f - t * (2.0f - t)) * (LCD_HEIGHT - NOPE_Y));   // ease out
-    memcpy(gfx->getFramebuffer() + (size_t)NOPE_Y * LCD_WIDTH, DEC_NEG + (size_t)NOPE_Y * LCD_WIDTH,
+    memcpy(gfx->getFramebuffer() + (size_t)NOPE_Y * LCD_WIDTH, badge + (size_t)NOPE_Y * LCD_WIDTH,
            (size_t)(LCD_HEIGHT - NOPE_Y) * LCD_WIDTH * 2);                       // badge underneath
     gfx->fillRoundRect(NOPE_X, y, NOPE_W, NOPE_H, 16, RGB565(12, 16, 34));
-    gfx->drawRoundRect(NOPE_X, y, NOPE_W, NOPE_H, 16, RGB565(230, 60, 60));
-    gfx->drawRoundRect(NOPE_X + 1, y + 1, NOPE_W - 2, NOPE_H - 2, 15, RGB565(230, 60, 60));
-    centred(y + 8, "OFFICIAL REASON:", 2, RGB565(255, 90, 90));
+    gfx->drawRoundRect(NOPE_X, y, NOPE_W, NOPE_H, 16, edge);
+    gfx->drawRoundRect(NOPE_X + 1, y + 1, NOPE_W - 2, NOPE_H - 2, 15, edge);
+    centred(y + 8, "OFFICIAL REASON:", 2, head);
     int ty = y + 30 + (NOPE_ROWS - nl) * 9;          // centre short reasons vertically
     for (int i = 0; i < nl; i++) centred(ty + i * 19, lines[i], 2, RGB565_WHITE);
     flushRect(0, NOPE_Y, LCD_WIDTH, LCD_HEIGHT - NOPE_Y);
   }
-  Serial.printf("decider: official reason - %s\n", reason);
+  Serial.printf("ask    : official reason (%s) - %s\n", approved ? "yes" : "no", reason);
 }

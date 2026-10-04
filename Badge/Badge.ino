@@ -129,7 +129,7 @@ static const int SLOT_R[5] = {  20,  36,  60,  36,  20 };
 #define APP_RUMOURS  2
 #define APP_SLAP     3
 #define APP_SETTINGS 4
-static const char *APP_NAME[APP_COUNT] = { "PICTURES", "DECIDER", "RUMOURS", "SLAP", "SETTINGS" };
+static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "SETTINGS" };
 #define DOTS_Y      360                  // page dots, between the icon and the pill
 #define HPILL_X     118                  // home pill: app name + Wi-Fi line
 #define HPILL_Y     372
@@ -920,7 +920,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.7 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.8 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

@@ -1,5 +1,5 @@
 /*
- * Decider — tap the coin on the home screen, a coin is tossed, and it lands on
+ * Decider ("ASK DANNY" on the home screen since v3.8) — tap the coin on the home screen, a coin is tossed, and it lands on
  * "APPROVED BY DANNY" or "DISAPPROVED BY DANNY". 50/50 from the hardware RNG.
  *
  * Third .ino in the Badge sketch. Arduino concatenates Badge.ino first, then the others in
@@ -340,7 +340,7 @@ void showDecider() {
     if (decBootHome()) return;
     delay(10);
   }
-  if (!decResult) nopeDrawCard();                    // Nope.ino: Danny's official reason (v3.7)
+  nopeDrawCard(decResult == 1);                      // Nope.ino: Danny's official reason (yes or no)
   decDrawPill();
   flushRect(DEC_PILL_X - 4, DEC_PILL_Y - 4, DEC_PILL_W + 8, DEC_PILL_H + 8);
   Serial.println("decider: result up - tap to toss again, HOME or BOOT for the main screen");

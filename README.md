@@ -518,6 +518,15 @@ AGAIN | HOME.
 - `update_badge_content.cmd` has a step for it (3/4).
 - Build: **3,119,667 bytes** (66%).
 
+## v3.8 - Ask Danny
+
+- The Decider is called **ASK DANNY** on the home screen (and in the SOS MARKETS headline). Code names
+  (`Decider.ino`, `ST_DECIDER`) are unchanged.
+- **Approved** now also gets an OFFICIAL REASON card, in green: one of 40 yeses ("I'm in, and I brought
+  snacks."), compiled in as `YES_REASONS` in `Nope.ino` (em dashes straightened for the ASCII font; all fit
+  the 4 x 24 card). Disapproved keeps the red card with the No-as-a-Service excuses. `preview_yes.png`.
+- Build: **3,122,071 bytes** (66%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
