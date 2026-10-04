@@ -83,6 +83,11 @@ bool sosnet_start(const char *host, int port, bool tls, const char *clientId, co
   cfg.session.last_will.retain = 1;
   cfg.network.reconnect_timeout_ms = 10000;
   cfg.task.stack_size = 8192;                   // TLS handshakes need more than the default
+  // v3.6: priority 1, the same as Arduino's loop(). The default (5) is above loop(), and this
+  // core's esp-mqtt task is not pinned to a core - so a (re)connect's TLS handshake could land on
+  // the UI core and freeze the carousel for a second or more. At 1 it shares instead of pre-empting,
+  // and runs on core 0 whenever that core is idle.
+  cfg.task.priority = 1;
 
   s_client = esp_mqtt_client_init(&cfg);
   if (!s_client) { snprintf(s_status, sizeof(s_status), "init failed"); return false; }

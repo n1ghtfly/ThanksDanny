@@ -421,7 +421,7 @@ void syncPictures() {
     String path = String(PICS_DIR) + "/" + picFile[n];
     syncDone = n;
     syncNote = picFile[n];
-    showScreen(ST_GALLERY_SYNC);
+    if (!syncQuiet) showScreen(ST_GALLERY_SYNC);  // quiet = background: never touch the screen
 
     File f = LittleFS.open(path, FILE_READ);
     uint32_t have = f ? f.size() : 0;
@@ -636,6 +636,7 @@ bool galleryBuffers() {
 }
 
 void showGallery() {
+  contentSyncWait();                              // a background update may be writing /pics
   if (!galleryBuffers()) {
     centred(232, "no memory for pictures", 1, RGB565(255, 120, 120));
     gfx->flush();
@@ -894,4 +895,69 @@ void galleryBootFetch() {
 // Tap handling while the sync screen is up.
 void gallerySyncTap() {
   if (syncState == 4 || syncState == 3) showScreen(ST_GALLERY);
+}
+
+// ---------------------------------------------------------------- background update (v3.6)
+//
+// The check for new pictures and rumours used to run inside loop() as soon as Wi-Fi came up:
+// two to four HTTPS handshakes plus up to 6 s waiting for SNTP, during which nothing polled the
+// touch panel - the carousel simply froze for several seconds after every start-up. It now runs
+// in its own task on core 0 (the UI is on core 1), at a low priority so the audio tasks still win.
+// It never draws: syncQuiet keeps drawGallerySync() and the per-file progress off the screen.
+// Opening Pictures or Rumours while it runs waits for it (contentSyncWait), since the sync
+// rewrites the lists and the files those apps read. A first boot (nothing cached yet) still syncs
+// in the foreground, with progress on screen, because there is nothing to show without it.
+static volatile bool contentBusy = false;
+
+static void contentSyncTask(void *) {
+  vTaskDelay(pdMS_TO_TICKS(500));                 // let DNS and the route settle first
+  uint32_t t0 = millis();
+  galleryBootFetch();
+  void rumoursBootFetch();
+  rumoursBootFetch();
+  Serial.printf("sync   : background update done in %lu ms\n", (unsigned long)(millis() - t0));
+  contentBusy = false;
+  vTaskDelete(nullptr);
+}
+
+void contentSyncStart() {
+  void rumoursBootFetch();
+  if (!LittleFS.exists(PICS_DIR)) {               // first boot: in front, with progress
+    galleryBootFetch();
+    rumoursBootFetch();
+    return;
+  }
+  contentBusy = true;
+  if (xTaskCreatePinnedToCore(contentSyncTask, "sync", 16384, nullptr, 1, nullptr, 0) != pdPASS) {
+    contentBusy = false;
+    Serial.println("sync   : ! no task - updating in the foreground");
+    galleryBootFetch();
+    rumoursBootFetch();
+    return;
+  }
+  Serial.println("sync   : checking for new pictures and rumours in the background");
+}
+
+bool contentSyncBusy() { return contentBusy; }
+
+// Called by Pictures and Rumours before they read their files.
+void contentSyncWait() {
+  if (!contentBusy) return;
+  uint32_t t0 = millis();
+  int lastDone = -1;
+  while (contentBusy && millis() - t0 < 90000) {
+    if (syncDone != lastDone) {
+      lastDone = syncDone;
+      gfx->fillScreen(RGB565(10, 12, 16));
+      centred(206, "updating...", 3, RGB565_WHITE);
+      if (syncState == 2 && syncTotal > 0) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "picture %d of %d", syncDone + 1, syncTotal);
+        centred(250, buf, 2, RGB565(150, 220, 255));
+      }
+      gfx->flush();
+    }
+    delay(50);
+  }
+  Serial.printf("sync   : app waited %lu ms for the background update\n", (unsigned long)(millis() - t0));
 }

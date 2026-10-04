@@ -302,6 +302,8 @@ void rumDrawScreen() {
 }
 
 void showRumours() {
+  void contentSyncWait();                         // Gallery.ino: a background update may be running
+  contentSyncWait();
   if (rumCount == 0) loadCachedRumours();
   if (rumCount == 0) rumoursSync(false);          // first time: fetch, with progress on screen
   int idx = nextRumour();

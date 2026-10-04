@@ -920,7 +920,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.2 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.6 (" __DATE__ " " __TIME__ "): app carousel - pictures, decider, rumours, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1036,11 +1036,9 @@ void loop() {
       // Fetch pictures now that we are online, so the app has content before it is opened and
       // new pictures appear after a reboot. It also exercises the download path at every boot
       // without needing a tap, which is how it gets tested.
-      void galleryBootFetch();          // Gallery.ino, later in the same translation unit
-      delay(500);                       // let DNS and the route settle before the first handshake
-      galleryBootFetch();
-      void rumoursBootFetch();          // Rumours.ino: the rumour clips, quietly
-      rumoursBootFetch();
+      // v3.6: in a background task on core 0, so the carousel keeps responding (Gallery.ino).
+      void contentSyncStart();
+      contentSyncStart();
       void sosStart();                  // Sos.ino: join the badge network
       sosStart();
       // Redraw the home screen so its Wi-Fi line shows the address (a redraw is ~80 ms now), and
@@ -1057,5 +1055,12 @@ void loop() {
   void sosPoll(); sosPoll();                                          // badge network: slaps, presence
   if (screen == ST_SLAP && !saverActive()) { void sosTick(); sosTick(); }   // swing detection
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
+  // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
+  // printed just before it in the log show what was running.
+  static uint32_t lastPass = 0;
+  uint32_t nowMs = millis();
+  if (lastPass && nowMs - lastPass > 150)
+    Serial.printf("stall  : loop blocked %lu ms (screen %d)\n", (unsigned long)(nowMs - lastPass), screen);
+  lastPass = nowMs;
   delay(POLL_MS);
 }

@@ -487,6 +487,21 @@ Build: **3,114,911 bytes** (66%).
   publish. `push_pictures_site.cmd`'s commit message is now generic.
 - Build: **3,116,427 bytes** (66%).
 
+## v3.6 - carousel freezes
+
+- **Start-up update off the UI**: the check for new pictures and rumours ran inside `loop()` right after
+  Wi-Fi connected - 2-4 HTTPS handshakes plus up to 6 s waiting for SNTP, with no touch polling, so the
+  carousel froze for several seconds after every boot. It now runs in a task on core 0 (priority 1, below
+  the audio tasks) and never draws (`contentSyncStart()` in `Gallery.ino`). Pictures and Rumours wait for it
+  if opened meanwhile ("updating... picture 3 of 8"). First boot (nothing cached) still syncs on screen.
+  Also fixed: the quiet sync called `showScreen(ST_GALLERY_SYNC)` per picture, silently switching the
+  screen state away from home while home was on the glass.
+- **MQTT task priority 1** (was 5): the core's esp-mqtt task is not pinned to a core, so a reconnect's TLS
+  handshake could pre-empt `loop()` on the UI core for a second or more.
+- **Stall log**: `stall  : loop blocked N ms (screen S)` whenever one pass of `loop()` takes over 150 ms.
+  Expected for app openings and animations; anything on the home screen with no tap before it is a lead.
+- Build: **3,117,299 bytes** (66%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
