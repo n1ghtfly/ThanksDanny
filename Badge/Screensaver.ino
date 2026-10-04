@@ -15,8 +15,9 @@
  * the crawl itself never stands still, and the panel goes to sleep after SAVER_OFF_MS anyway.
  * The crawl is cheap: a 466x30 strip is redrawn and sent with flushRect() ~30 times a second.
  *
- * Wakes on: a tap (swallowed - it does not also press whatever is under it), BOOT, picking the
- * badge up (the gyro), or an incoming slap (which takes over the screen as usual). Tap/BOOT/lift
+ * Wakes on: a tap (swallowed - it does not also press whatever is under it), BOOT, or an
+ * incoming slap (which takes over the screen as usual). Movement does NOT wake it (v3.4: walking
+ * around with the badge on kept waking it). Tap/BOOT
  * bring back exactly the screen that was up: the frame is copied to PSRAM when the saver starts
  * and copied back on wake, so no app has to know how to redraw itself.
  *
@@ -32,7 +33,6 @@
 #define SAVER_OFF_MS     300000UL         // then this long before the panel sleeps
 #define SAVER_BRIGHT     40               // dimmed panel brightness (0-255)
 #define SAVER_NORMAL     170              // keep equal to setBrightness() in Badge.ino setup()
-#define SAVER_WAKE_DPS   120              // turning faster than this (picking it up) wakes it
 
 #define SV_QUOTE_MS      12000UL          // main quote: next index this often (prices tick too)
 #define SV_CRAWL_MS      33               // crawl frame time (~30 fps)
@@ -45,7 +45,7 @@
 #define SV_SLEEP 2
 
 static uint8_t   saverState = SV_OFF;
-static uint32_t  saverLastInput = 0, saverSince = 0, saverLastCheck = 0, saverLastMotion = 0;
+static uint32_t  saverLastInput = 0, saverSince = 0, saverLastCheck = 0;
 static uint32_t  saverLastQuote = 0, saverLastCrawl = 0;
 static uint16_t *saverFrame = nullptr;    // the screen that was up, kept in PSRAM (434 kB)
 static bool      saverRedraw = false;     // that screen changed meanwhile: redraw instead of restore
@@ -346,11 +346,9 @@ void saverLoop() {
   int16_t xs[1], ys[1];
   bool touched = touchOK && touch.getPoint(xs, ys, 1) > 0;
   bool boot = bootButtonHit();
-  bool lifted = false;
-  if (now - saverLastMotion >= 50) { saverLastMotion = now; lifted = sosTurnRate() > SAVER_WAKE_DPS; }
 
-  if (touched || boot || lifted) {
-    saverWake(true, touched ? "tap" : boot ? "BOOT" : "picked up");
+  if (touched || boot) {
+    saverWake(true, touched ? "tap" : "BOOT");
     if (touched) {                           // swallow the waking finger until it lifts
       uint32_t last = millis(), t0 = last;
       while (millis() - last < 150 && millis() - t0 < 3000) {

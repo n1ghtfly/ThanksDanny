@@ -469,6 +469,12 @@ saver (when it starts, waking, panel sleep, restoring the screen) is unchanged f
 - Burn-in: header and quote move to a random spot within +-30 px every minute; the band keeps moving.
 - Build: **3,114,995 bytes** (66%), globals 24%.
 
+## v3.4 - screensaver ignores movement
+
+Moving the badge (walking with it on a lanyard) kept waking the screensaver. It now wakes only on a
+screen touch or the BOOT button - and an incoming slap still takes over the screen as before.
+Build: **3,114,911 bytes** (66%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
