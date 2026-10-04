@@ -451,6 +451,24 @@ The badges (Claudio, Danny, Walter) now talk to each other through your own Mosq
 - Tunables at the top of `Screensaver.ino`: `SAVER_AFTER_MS`, `SAVER_OFF_MS`, `SAVER_BRIGHT`, `SAVER_WAKE_DPS`.
 - Build: **3,112,971 bytes** (65%), globals 23%.
 
+## v3.3 - SOS MARKETS (Bloomberg-style screensaver)
+
+The screensaver's clock became a market screen (`preview_screensaver.png`); everything else about the
+saver (when it starts, waking, panel sleep, restoring the screen) is unchanged from v3.2.
+
+- **Header** "SOS MARKETS 20:41" (amber), **main quote** in the centre: symbol, price, change (green
+  up-triangle / red down-triangle, or a status) and an analyst quip, plus market breadth (up / down count).
+  The main quote moves on to the next index every 12 s, and all prices tick at the same moment.
+- **Crawl**: an amber band along the bottom edge scrolls every index and a headline every four quotes
+  ("FED HOLDS COFFEE RATE AT ZERO"). ~60 px/s at ~30 fps; only the 466x30 band is redrawn and sent
+  (`flushRect`), so it costs a few ms per frame. Rebuilt with fresh prices each time it has run through.
+- **Indices** (`SV[]` in `Screensaver.ino`): random walks with a personality - $DANNY only goes up,
+  $MEETING only down (floor -99.9%), $BUGS to the moon; fixed statuses $COFFEE LIMIT DOWN, $DEPLOY HALTED,
+  $RUMOUR UNCONFIRMED. Live ones: $CLAUDIO / $DANNY / $WALTER show **MKT CLOSED** while that badge is
+  offline, $SLAP is this badge's real received-slap count, $BEER is PRE-MARKET until 17:00.
+- Burn-in: header and quote move to a random spot within +-30 px every minute; the band keeps moving.
+- Build: **3,114,995 bytes** (66%), globals 24%.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

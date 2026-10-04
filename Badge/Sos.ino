@@ -153,6 +153,9 @@ int sosOnlineCount() {
 bool sosIsOnline(int i) { return i >= 0 && i < SOS_N && (sosOnline[i] || (i == sosMe && sosnet_connected())); }
 // SLAP is just showing the victims (not armed, not showing a result).
 bool slapIdle() { return slapState == SLAP_PICK; }
+// For the market screensaver: slaps received / dealt by this badge, all time.
+uint32_t sosSlapsGot() { return sosGot; }
+uint32_t sosSlapsDealt() { return sosDealt; }
 
 // ---------------------------------------------------------------- motion
 
