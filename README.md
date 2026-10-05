@@ -553,6 +553,12 @@ AGAIN | HOME.
   Websockets Support (`server/mosquitto/README.md` section 9).
 - Build: **3,125,739 bytes** (66%).
 
+## v3.10 - no start-up splash
+
+The power-on picture and sound (v3.0) are gone: the badge goes straight to the home screen. Removed
+`Badge/Startup.ino`, `Badge/startup_assets.h`, `tools/prep_startup.py` and `preview_startup.png`.
+Build: **2,648,415 bytes** (56%, was 66% - the splash was ~470 kB of compiled-in picture and sound).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

@@ -1,12 +1,12 @@
-# Thanks Danny badge - project index (v3.9, 5 Oct 2026)
+# Thanks Danny badge - project index (v3.10, 5 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.9)
+## What the badge does (v3.10)
 
-- **Startup**: a picture and a short sound at power-on, then the home screen (tap to skip).
+- **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
   page dots, and a name + Wi-Fi pill. Swipe left/right to move, tap the middle icon to open it,
   tap a side icon to bring it to the middle. The icon lights up as soon as it is touched.
@@ -45,7 +45,7 @@ measurements); this page is the map.
 
 | Folder / file | What it is |
 |---|---|
-| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, carousel, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Startup.ino` (power-on splash), `Sos.ino` (badge network + Slap), `Screensaver.ino` (SOS MARKETS screensaver), `Nope.ino` (Danny's excuses), `Vote.ino` (questions from the poll website), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
+| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, carousel, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Sos.ino` (badge network + Slap), `Screensaver.ino` (SOS MARKETS screensaver), `Nope.ino` (Danny's excuses), `Vote.ino` (questions from the poll website), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
 | `tools/flash_badge.cmd` | Double-click: clean build + upload + boot log. |
 | `tools/prep_decider.py` | `assets/chooser` badges -> `Badge/decider_assets.h` |
 | `tools/prep_decider_sound.py` | `assets/chooser/drummroll.mp3` -> `Badge/decider_sound.h` (needs ffmpeg) |
@@ -53,7 +53,6 @@ measurements); this page is the map.
 | `server/mosquitto/` | config, ACL, Docker file and setup steps for the badges' Mosquitto |
 | `tools/sos_cli.py` | watch / who / slap from a PC (`pip install paho-mqtt`) |
 | `tools/make_sos_sounds.py` | synthesizes the slap sounds -> `Badge/sos_sounds.h` |
-| `tools/prep_startup.py` | `Downloads\ThanksDanny\startup` -> `Badge/startup_assets.h` (splash picture + sound; needs ffmpeg) |
 | `tools/prep_rumours.py` | `Downloads\ThanksDanny\mp3` -> `github-pics/rumours/` (16 kHz mono MP3 + `rumours.txt`; needs ffmpeg) |
 | `push_pictures_site.cmd` | publishes `github-pics/` (pictures + rumours) to GitHub Pages |
 | `tools/prep_github_pics.py` | pictures for the GitHub Pages gallery -> `github-pics/` |
@@ -71,7 +70,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.9 build: 3,125,739 bytes (65% of the app partition), globals 23%
+- v3.10 build: 2,648,415 bytes (65% of the app partition), globals 23%
 
 ## Restore from scratch (new PC, or a wiped board)
 
