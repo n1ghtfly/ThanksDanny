@@ -15,6 +15,14 @@ pattern read  sos/presence/+
 # Group messages (hot potato, summon, ...) for later versions.
 pattern readwrite sos/all/#
 
+# Questions from the poll website (web/poll.html) and their votes (v3.9).
+# sos/poll/<asker>: one open question per person, only under your OWN name; everyone reads them.
+pattern write sos/poll/%u
+pattern read  sos/poll/+
+# sos/vote/<asker>/<voter>: you vote only as yourself (no ballot stuffing); everyone sees the votes.
+pattern write sos/vote/+/%u
+pattern read  sos/vote/#
+
 # A PC login for tools/sos_cli.py: can watch everything (it sends like any other user).
 user console
 topic read sos/#

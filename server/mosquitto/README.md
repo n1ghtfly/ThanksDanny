@@ -124,3 +124,41 @@ certificate NPM already manages - Mosquitto then needs no certificate at all.
 
 Note: when the broker name resolves to your public IP, a home-network test must use Mosquitto's LAN IP
 directly (port 1883, no TLS) until step 4 is done.
+
+## 9. The poll website (Ask the Council, v3.9)
+
+`web/poll.html` (published on the GitHub Pages site as `poll/`) lets you ask a question with 2-4 answers;
+every badge pops it up, and votes come back live. A browser cannot speak plain MQTT, so Mosquitto also
+needs a **WebSocket** listener, with TLS in front of it (a page on https:// may only use `wss://`).
+
+1. **Mosquitto** - in `~/IOTstack/volumes/mosquitto/config/mosquitto.conf` add:
+
+       listener 9001
+       protocol websockets
+
+   and publish the port in `~/IOTstack/docker-compose.yml`, under the mosquitto service's `ports:`
+   (IOTstack often has this line already, commented out):
+
+       - "9001:9001"
+
+2. **Access rules** - add the poll lines from this folder's `acl` to your `sos.acl`
+   (`sos/poll/...` and `sos/vote/...`: you can only ask and vote under your own name).
+
+3. Restart: `cd ~/IOTstack && docker-compose up -d mosquitto` (up -d, not restart, so the new port is
+   picked up), then `docker logs mosquitto --tail 20` should show `Opening websockets listen socket on port 9001`.
+
+4. **Nginx Proxy Manager** -> Hosts -> Proxy Hosts -> Add:
+   - Domain: `<your-broker>.duckdns.org`  (the same name as the badges use is fine: this is port 443, the
+     badges use 8883)
+   - Scheme `http`, Forward Hostname `<Pi LAN IP>`, Forward Port `9001`
+   - **Websockets Support: ON**
+   - SSL tab: your existing Let's Encrypt certificate for that name, Force SSL on.
+
+5. **Router**: TCP 443 must reach Nginx Proxy Manager (it probably does already if you use NPM for
+   anything else). Test from a phone on mobile data: `https://<your-broker>.duckdns.org` should give an
+   NPM/502 page rather than time out.
+
+6. Open the website, enter `wss://<your-broker>.duckdns.org/mqtt`, pick your name and type your badge
+   password. The address is remembered by the browser; the password never is.
+
+Nothing in the repository contains your broker's address - it is typed into the page.

@@ -527,6 +527,32 @@ AGAIN | HOME.
   the 4 x 24 card). Disapproved keeps the red card with the No-as-a-Service excuses. `preview_yes.png`.
 - Build: **3,122,071 bytes** (66%).
 
+## v3.9 - Ask the Council (poll website)
+
+`preview_vote.png` (badge), `preview_poll_web.png` (website).
+
+- **Website** `web/poll.html` (one file, no libraries - it carries a ~150-line MQTT 3.1.1 client over
+  WebSocket). Log in with your own badge login, ask a question (up to 96 characters - checked live against
+  the badge's 4 x 24 word-wrap) with 2-4 answers (presets or your own, 12 characters each), watch the votes
+  come in, vote yourself, close your question. Verdict when everyone voted ("Tie ... Ask Danny."). The broker
+  address is typed in (remembered by the browser); the password is never stored. Published on the Pages site
+  as `poll/index.html`.
+- **Badges** (`Badge/Vote.ino`): an open question they have not answered pops up wherever they are (not over
+  a slap, an armed swing, a playing rumour or the setup pages) with a swish: "<NAME> ASKS:", the question, one
+  button per answer, LATER. After voting: live bars with initials, "waiting for ...". LATER shelves it until
+  the next start-up. Retained topics, so a badge that was off still gets open questions, and knows from its own
+  retained vote that it already answered.
+- **Protocol**: `sos/poll/<asker>` = `<id>|<question>|<a1>|<a2>[|<a3>|<a4>]` retained (empty = closed);
+  `sos/vote/<asker>/<voter>` = `<id>|<index>` retained. ACL: ask and vote only under your own name.
+- `sosnet`: message payloads 64 -> 208 bytes, up to 8 subscriptions, receive queue 24.
+- **Tested** end to end on Mosquitto 2.0.22 with the new ACL: the page in headless Chromium (through a
+  WebSocket bridge) as Claudio, two simulated badges as Danny and Walter: question delivered in the badge
+  format, votes counted live on the page, verdict, close; wrong password reported; Danny voting as Walter and
+  Danny posting a question as Claudio both dropped by the broker.
+- Server: `listener 9001` + `protocol websockets`, ACL lines, port 9001 in docker-compose, NPM proxy host with
+  Websockets Support (`server/mosquitto/README.md` section 9).
+- Build: **3,125,739 bytes** (66%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

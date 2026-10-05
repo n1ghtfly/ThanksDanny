@@ -5,8 +5,9 @@
 
 struct SosMsg {
   char topic[64];
-  char payload[64];
+  char payload[208];        // v3.9: a poll ("<id>|question|answer|...") is up to ~170 bytes
 };
+#define SOSNET_MAX_SUBS 8
 
 // Connect (or reconnect with new settings). Subscriptions are re-made on every (re)connect;
 // `onlineTopic` gets a retained "1" when connected, and a retained "0" as the last will.

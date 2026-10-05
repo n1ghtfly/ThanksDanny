@@ -57,7 +57,7 @@ bool saverActive() { return saverState != SV_OFF; }
 static bool saverAllowed() {
   if (touchDown) return false;
   switch (screen) {
-    case ST_HOME: case ST_MENU: case ST_GALLERY: case ST_DECIDER: case ST_SLAPPED: return true;
+    case ST_HOME: case ST_MENU: case ST_GALLERY: case ST_DECIDER: case ST_SLAPPED: case ST_VOTE: return true;
     case ST_RUMOURS: return !rumBusy;
     case ST_SLAP:    return slapIdle();
     default:         return false;

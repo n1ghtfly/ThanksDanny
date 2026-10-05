@@ -135,9 +135,9 @@ void sosStart() {
   snprintf(inbox, sizeof(inbox), "sos/%s/inbox/+", SOS_ID[sosMe]);
   snprintf(online, sizeof(online), "sos/presence/%s", SOS_ID[sosMe]);
   snprintf(cid, sizeof(cid), "sos-%s", SOS_ID[sosMe]);
-  const char *subs[3] = { inbox, "sos/presence/+", "sos/all/#" };
+  const char *subs[5] = { inbox, "sos/presence/+", "sos/all/#", "sos/poll/+", "sos/vote/#" };   // v3.9: polls
   for (int i = 0; i < SOS_N; i++) sosOnline[i] = false;
-  sosStarted = sosnet_start(sosHost.c_str(), sosPort, sosTls, cid, sosUser.c_str(), sosPass.c_str(), online, subs, 3);
+  sosStarted = sosnet_start(sosHost.c_str(), sosPort, sosTls, cid, sosUser.c_str(), sosPass.c_str(), online, subs, 5);
   Serial.printf("sos    : connecting to %s:%d as %s (%s)\n", sosHost.c_str(), sosPort, SOS_ID[sosMe],
                 sosTls ? "TLS" : "plain");
 }
@@ -411,6 +411,10 @@ bool sosDrain() {
   SosMsg m;
   bool presenceChanged = false;
   while (sosnet_next(&m)) {
+    if (!strncmp(m.topic, "sos/poll/", 9) || !strncmp(m.topic, "sos/vote/", 9)) {
+      voteOnMessage(m.topic, m.payload);          // Vote.ino: questions from the website, and votes
+      continue;
+    }
     if (!strncmp(m.topic, "sos/presence/", 13)) {
       int who = sosIndex(m.topic + 13);
       if (who >= 0) {
@@ -488,7 +492,13 @@ void sosPoll() {
       if (screen == ST_APINFO) showScreen(ST_MENU);
     }
   }
-  if (sosDrain() && screen != ST_APINFO && screen != ST_GALLERY_SYNC) showScreen(ST_SLAPPED);
+  if (sosDrain() && screen != ST_APINFO && screen != ST_GALLERY_SYNC) { showScreen(ST_SLAPPED); return; }
+  // v3.9: an open question this badge has not answered yet pops up - but never on top of a slap,
+  // a swing in progress, a rumour that is playing or the setup pages.
+  if (screen == ST_APINFO || screen == ST_GALLERY_SYNC || screen == ST_SLAPPED || screen == ST_VOTE) return;
+  if (screen == ST_SLAP && slapState != SLAP_PICK) return;
+  if (screen == ST_RUMOURS && rumBusy) return;
+  if (voteWaiting() >= 0) showScreen(ST_VOTE);
 }
 
 // The gallery runs its own loop; it asks this between pictures so a slap is never missed.

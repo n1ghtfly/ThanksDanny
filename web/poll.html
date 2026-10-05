@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask the Council</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --bg: #080a14; --card: #11152a; --line: #252b48; --text: #e8eaf4; --dim: #8a90ac;
+    --amber: #ffaf28; --green: #2eaa50; --red: #c83c3c; --blue: #3278d2; --gold: #d2961e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .04em; }
+  h1 small { display: block; font-size: 12px; color: var(--dim); letter-spacing: .12em; font-weight: 600; }
+  .dots { display: flex; gap: 6px; }
+  .dot { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); display: grid;
+         place-items: center; font: 700 13px ui-monospace, monospace; color: var(--dim); }
+  .dot.on { background: var(--green); border-color: var(--green); color: #031; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .14em; color: var(--amber); }
+  label { display: block; font-size: 13px; color: var(--dim); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; background: #0a0d1c; color: var(--text); border: 1px solid var(--line);
+         border-radius: 10px; padding: 10px 12px; font: inherit; }
+  textarea { resize: vertical; min-height: 64px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 12px; padding: 11px 16px; cursor: pointer;
+           background: var(--amber); color: #1a1000; }
+  button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+  .chips button { padding: 6px 10px; font-size: 13px; background: #1a2040; color: var(--text); font-weight: 600; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 4px; }
+  .hint.bad { color: #ff8080; }
+  .status { font-size: 13px; color: var(--dim); }
+  .status.ok { color: #7be08f; } .status.bad { color: #ff8080; }
+  .poll .who { font-size: 13px; letter-spacing: .12em; color: var(--amber); font-weight: 700; }
+  .poll .q { font-size: 19px; font-weight: 600; margin: 4px 0 12px; }
+  .opt { margin: 8px 0; }
+  .opt .top { display: flex; justify-content: space-between; font-size: 15px; }
+  .opt .top b.mine::before { content: "\25B8 "; color: var(--amber); }
+  .bar { height: 10px; background: #1a1f38; border-radius: 6px; overflow: hidden; margin-top: 4px; }
+  .bar i { display: block; height: 100%; border-radius: 6px; transition: width .4s; }
+  .votebtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .votebtns button { color: #fff; }
+  .verdict { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #0a0d1c; font-weight: 700; }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px; }
+  .empty { color: var(--dim); text-align: center; padding: 8px 0; }
+  .hidden { display: none !important; }
+  footer { font-size: 12px; color: var(--dim); text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1><small>SONS OF SUDO</small>Ask the Council</h1>
+    <div class="dots" id="dots"></div>
+  </header>
+
+  <!-- 1. Log in with your own badge login -->
+  <section class="card" id="login">
+    <h2>LOG IN</h2>
+    <label for="broker">Badge network (WebSocket address)</label>
+    <input id="broker" placeholder="wss://your-broker.duckdns.org/mqtt" autocomplete="url">
+    <div class="row">
+      <div><label for="user">I am</label>
+        <select id="user"><option value="claudio">Claudio</option><option value="danny">Danny</option><option value="walter">Walter</option></select></div>
+      <div><label for="pass">Password</label><input id="pass" type="password" autocomplete="current-password"></div>
+    </div>
+    <div class="foot">
+      <span class="status" id="status">not connected</span>
+      <button id="connect">Connect</button>
+    </div>
+    <div class="hint">Same login as your badge. The password is only sent to your own broker and never stored.</div>
+  </section>
+
+  <!-- 2. Ask -->
+  <section class="card hidden" id="ask">
+    <h2>ASK A QUESTION</h2>
+    <textarea id="q" maxlength="96" placeholder="Pizza tonight?"></textarea>
+    <div class="hint" id="qhint">up to 96 characters - it has to fit on a round badge</div>
+    <label>Answers</label>
+    <div class="chips" id="presets"></div>
+    <div id="answers"></div>
+    <div class="foot">
+      <button class="ghost" id="addans">+ answer</button>
+      <button id="send">Send to the badges</button>
+    </div>
+    <div class="hint">Asking again replaces your open question.</div>
+  </section>
+
+  <!-- 3. Live questions -->
+  <section id="polls" class="hidden"></section>
+
+  <footer>Questions and votes travel over your own Mosquitto; nothing is stored anywhere else.</footer>
+</main>
+
+<script>
+"use strict";
+const MEMBERS = ["claudio", "danny", "walter"];
+const NAME = { claudio: "Claudio", danny: "Danny", walter: "Walter" };
+const COLORS = ["var(--green)", "var(--red)", "var(--blue)", "var(--gold)"];
+const PRESETS = [["Yes", "No"], ["Yes", "No", "Maybe"], ["Beer", "Wine", "Water"], ["Now", "Later", "Never"],
+                 ["Pizza", "Sushi", "Kebab", "Burger"]];
+const $ = id => document.getElementById(id);
+
+// ------------------------------------------------------------------ a tiny MQTT 3.1.1 client
+// Just enough for this page: connect with a login, subscribe, publish (QoS 1, retained), receive,
+// keep-alive, reconnect. Over WebSocket with the "mqtt" sub-protocol, as Mosquitto expects.
+class Mqtt {
+  constructor(url, user, pass, onMsg, onState) {
+    Object.assign(this, { url, user, pass, onMsg, onState });
+    this.subs = []; this.id = 1; this.buf = new Uint8Array(0); this.closed = false; this.delay = 1000;
+    this.clientId = "sos-web-" + user + "-" + Math.random().toString(36).slice(2, 8);
+    this.open();
+  }
+  static str(s) { const b = new TextEncoder().encode(s); return [b.length >> 8, b.length & 255, ...b]; }
+  static len(n) { const out = []; do { let d = n % 128; n = Math.floor(n / 128); if (n) d |= 128; out.push(d); } while (n); return out; }
+  send(type, body) { if (this.ws && this.ws.readyState === 1) this.ws.send(new Uint8Array([type, ...Mqtt.len(body.length), ...body])); }
+  open() {
+    this.onState("connecting");
+    let ws;
+    try { ws = new WebSocket(this.url, ["mqtt"]); } catch (e) { this.onState("bad", "that address does not look right"); return; }
+    this.ws = ws; ws.binaryType = "arraybuffer";
+    ws.onopen = () => {
+      const flags = 0x02 | 0x80 | 0x40;                               // clean session, user, password
+      this.send(0x10, [...Mqtt.str("MQTT"), 4, flags, 0, 30, ...Mqtt.str(this.clientId),
+                       ...Mqtt.str(this.user), ...Mqtt.str(this.pass)]);
+    };
+    ws.onmessage = ev => { const b = new Uint8Array(ev.data), n = new Uint8Array(this.buf.length + b.length);
+                           n.set(this.buf); n.set(b, this.buf.length); this.buf = n; this.parse(); };
+    ws.onclose = () => { clearInterval(this.ping); if (this.closed) return;
+                         this.onState("connecting", "lost the connection - retrying");
+                         setTimeout(() => this.open(), this.delay); this.delay = Math.min(this.delay * 2, 30000); };
+    ws.onerror = () => {};
+  }
+  parse() {
+    for (;;) {
+      if (this.buf.length < 2) return;
+      let mult = 1, len = 0, i = 1, d;
+      do { if (i >= this.buf.length) return; d = this.buf[i++]; len += (d & 127) * mult; mult *= 128; } while (d & 128);
+      if (this.buf.length < i + len) return;
+      const head = this.buf[0], body = this.buf.slice(i, i + len);
+      this.buf = this.buf.slice(i + len);
+      this.packet(head, body);
+    }
+  }
+  packet(head, b) {
+    const type = head >> 4;
+    if (type === 2) {                                                  // CONNACK
+      if (b[1] !== 0) { this.closed = true; this.ws.close();
+        this.onState("bad", b[1] === 4 || b[1] === 5 ? "wrong name or password" : "refused (code " + b[1] + ")"); return; }
+      this.delay = 1000; this.onState("ok");
+      this.ping = setInterval(() => this.send(0xC0, []), 25000);
+      if (this.subs.length) this.subscribe(this.subs, true);
+    } else if (type === 3) {                                           // PUBLISH
+      const qos = (head >> 1) & 3, tl = (b[0] << 8) | b[1];
+      const topic = new TextDecoder().decode(b.slice(2, 2 + tl));
+      let p = 2 + tl;
+      if (qos) { this.send(0x40, [b[p], b[p + 1]]); p += 2; }         // PUBACK
+      this.onMsg(topic, new TextDecoder().decode(b.slice(p)));
+    } else if (type === 9) {                                           // SUBACK
+      if ([...b.slice(2)].some(x => x === 0x80)) this.onState("bad", "the broker refused a subscription - check the ACL");
+    }
+  }
+  subscribe(topics, again) {
+    if (!again) this.subs.push(...topics);
+    const id = this.id++ & 0xffff || 1, body = [id >> 8, id & 255];
+    for (const t of topics) body.push(...Mqtt.str(t), 1);
+    this.send(0x82, body);
+  }
+  publish(topic, payload, retain) {
+    const id = this.id++ & 0xffff || 1;
+    this.send(0x32 | (retain ? 1 : 0), [...Mqtt.str(topic), id >> 8, id & 255, ...new TextEncoder().encode(payload)]);
+  }
+  close() { this.closed = true; clearInterval(this.ping); if (this.ws) { this.send(0xE0, []); this.ws.close(); } }
+}
+
+// ------------------------------------------------------------------ state
+let mq = null, me = null;
+const polls = {};          // asker -> {id, q, opts[]}
+const votes = {};          // asker -> voter -> {id, n}
+const online = {};
+
+// The badge font is plain ASCII, and '|' separates the fields on the wire.
+function clean(s) {
+  return s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-")
+          .replace(/…/g, "...").replace(/\|/g, "/").replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim();
+}
+// Same word-wrap as the badge: 24 columns, at spaces.
+function wrapLines(s) {
+  const lines = []; let rest = s;
+  while (rest.length) {
+    rest = rest.replace(/^ +/, ""); if (!rest) break;
+    let take = Math.min(rest.length, 24);
+    if (rest.length > 24) { let sp = take; while (sp > 0 && rest[sp] !== " ") sp--; if (sp > 0) take = sp; }
+    lines.push(rest.slice(0, take)); rest = rest.slice(take);
+  }
+  return lines;
+}
+
+// ------------------------------------------------------------------ UI: login
+try { $("broker").value = localStorage.getItem("sos.broker") || ""; $("user").value = localStorage.getItem("sos.user") || "claudio"; } catch (e) {}
+
+function setStatus(state, text) {
+  const s = $("status");
+  s.className = "status " + (state === "ok" ? "ok" : state === "bad" ? "bad" : "");
+  s.textContent = text || { ok: "connected as " + NAME[me], connecting: "connecting...", bad: "could not connect" }[state];
+  const on = state === "ok";
+  $("ask").classList.toggle("hidden", !on);
+  $("polls").classList.toggle("hidden", !on);
+  $("connect").textContent = mq ? "Disconnect" : "Connect";
+}
+
+$("connect").onclick = () => {
+  if (mq) { mq.close(); mq = null; setStatus("idle", "not connected"); return; }
+  const url = $("broker").value.trim(), user = $("user").value, pass = $("pass").value;
+  if (!/^wss?:\/\//.test(url)) { setStatus("bad", "the address starts with wss://"); return; }
+  if (!pass) { setStatus("bad", "type your password"); return; }
+  try { localStorage.setItem("sos.broker", url); localStorage.setItem("sos.user", user); } catch (e) {}
+  me = user;
+  mq = new Mqtt(url, user, pass, onMessage, setStatus);
+  mq.subscribe(["sos/poll/+", "sos/vote/#", "sos/presence/+"]);
+};
+
+function onMessage(topic, payload) {
+  const t = topic.split("/");
+  if (t[1] === "presence") online[t[2]] = payload === "1";
+  else if (t[1] === "poll") {
+    if (!payload) delete polls[t[2]];
+    else { const f = payload.split("|"); if (f.length >= 4) polls[t[2]] = { id: f[0], q: f[1], opts: f.slice(2, 6) }; }
+  } else if (t[1] === "vote" && t.length === 4) {
+    const f = payload.split("|");
+    (votes[t[2]] = votes[t[2]] || {})[t[3]] = payload ? { id: f[0], n: +f[1] } : null;
+  }
+  render();
+}
+
+// ------------------------------------------------------------------ UI: asking
+let answers = ["Yes", "No"];
+function drawAnswers() {
+  $("answers").innerHTML = "";
+  answers.forEach((a, i) => {
+    const row = document.createElement("div"); row.className = "row"; row.style.marginTop = "6px";
+    const inp = document.createElement("input"); inp.maxLength = 12; inp.value = a; inp.placeholder = "answer " + (i + 1);
+    inp.oninput = () => { answers[i] = inp.value; check(); };
+    row.appendChild(inp);
+    if (answers.length > 2) { const x = document.createElement("button"); x.className = "ghost"; x.textContent = "x"; x.style.flex = "0 0 44px";
+      x.onclick = () => { answers.splice(i, 1); drawAnswers(); }; row.appendChild(x); }
+    $("answers").appendChild(row);
+  });
+  $("addans").disabled = answers.length >= 4;
+  check();
+}
+PRESETS.forEach(p => { const b = document.createElement("button"); b.textContent = p.join(" / ");
+  b.onclick = () => { answers = [...p]; drawAnswers(); }; $("presets").appendChild(b); });
+$("addans").onclick = () => { if (answers.length < 4) { answers.push(""); drawAnswers(); } };
+$("q").oninput = check;
+
+function check() {
+  const q = clean($("q").value), lines = wrapLines(q), opts = answers.map(clean).filter(Boolean);
+  const ok = q.length > 0 && lines.length <= 4 && opts.length >= 2;
+  const h = $("qhint");
+  h.className = "hint" + (lines.length > 4 ? " bad" : "");
+  h.textContent = lines.length > 4 ? "too long for the badge - shorten it a little"
+               : q.length ? q.length + "/96 - " + lines.length + " line" + (lines.length > 1 ? "s" : "") + " on the badge"
+               : "up to 96 characters - it has to fit on a round badge";
+  $("send").disabled = !ok || !mq;
+  return ok;
+}
+
+$("send").onclick = () => {
+  if (!check()) return;
+  const q = clean($("q").value), opts = answers.map(clean).filter(Boolean).slice(0, 4);
+  const id = String(Math.floor(Date.now() / 1000));
+  mq.publish("sos/poll/" + me, [id, q, ...opts].join("|"), true);
+  $("q").value = ""; check();
+};
+
+// ------------------------------------------------------------------ UI: live questions
+function render() {
+  const dots = $("dots"); dots.innerHTML = "";
+  for (const m of MEMBERS) { const d = document.createElement("div"); d.className = "dot" + (online[m] ? " on" : "");
+    d.textContent = NAME[m][0]; d.title = NAME[m] + (online[m] ? " - badge online" : " - badge offline"); dots.appendChild(d); }
+
+  const box = $("polls"); box.innerHTML = "";
+  const askers = MEMBERS.filter(a => polls[a]);
+  if (!askers.length) { box.innerHTML = '<div class="card empty">No open questions. Ask one!</div>'; return; }
+  for (const a of askers) {
+    const p = polls[a], v = votes[a] || {};
+    const pick = m => (v[m] && v[m].id === p.id && v[m].n >= 0 && v[m].n < p.opts.length) ? v[m].n : -1;
+    const card = document.createElement("div"); card.className = "card poll";
+    const who = document.createElement("div"); who.className = "who"; who.textContent = NAME[a].toUpperCase() + " ASKS";
+    const q = document.createElement("div"); q.className = "q"; q.textContent = p.q;
+    card.append(who, q);
+    const counts = p.opts.map((_, i) => MEMBERS.filter(m => pick(m) === i));
+    p.opts.forEach((o, i) => {
+      const row = document.createElement("div"); row.className = "opt";
+      const top = document.createElement("div"); top.className = "top";
+      const name = document.createElement("b"); name.textContent = o; if (pick(me) === i) name.className = "mine";
+      const ws = document.createElement("span"); ws.textContent = counts[i].map(m => NAME[m]).join(", ") || "-";
+      ws.style.color = "var(--dim)"; top.append(name, ws);
+      const bar = document.createElement("div"); bar.className = "bar";
+      const fill = document.createElement("i"); fill.style.width = (100 * counts[i].length / MEMBERS.length) + "%"; fill.style.background = COLORS[i];
+      bar.appendChild(fill); row.append(top, bar); card.appendChild(row);
+    });
+    const waiting = MEMBERS.filter(m => pick(m) < 0);
+    if (pick(me) < 0) {                                       // vote from here too
+      const vb = document.createElement("div"); vb.className = "votebtns";
+      p.opts.forEach((o, i) => { const b = document.createElement("button"); b.textContent = o; b.style.background = COLORS[i];
+        b.onclick = () => mq.publish("sos/vote/" + a + "/" + me, p.id + "|" + i, true); vb.appendChild(b); });
+      card.appendChild(vb);
+    }
+    if (!waiting.length) {
+      const max = Math.max(...counts.map(c => c.length)), top = p.opts.filter((_, i) => counts[i].length === max);
+      const vd = document.createElement("div"); vd.className = "verdict";
+      vd.textContent = top.length === 1 ? "The Council has spoken: " + top[0].toUpperCase() : "Tie between " + top.join(" and ") + ". Ask Danny.";
+      card.appendChild(vd);
+    }
+    const foot = document.createElement("div"); foot.className = "foot";
+    const st = document.createElement("span"); st.className = "status";
+    st.textContent = waiting.length ? "waiting for " + waiting.map(m => NAME[m]).join(", ") : "everyone voted";
+    foot.appendChild(st);
+    if (a === me) { const c = document.createElement("button"); c.className = "ghost"; c.textContent = "Close question";
+      c.onclick = () => mq.publish("sos/poll/" + me, "", true); foot.appendChild(c); }
+    card.appendChild(foot);
+    box.appendChild(card);
+  }
+}
+
+drawAnswers();
+render();
+</script>
+</body>
+</html>

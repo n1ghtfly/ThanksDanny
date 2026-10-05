@@ -178,6 +178,7 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_RUMOURS      7               // Rumours.ino: a random rumour MP3
 #define ST_SLAP         8               // Sos.ino: pick a victim, swing to slap
 #define ST_SLAPPED      9               // Sos.ino: you just got slapped
+#define ST_VOTE        10               // Vote.ino: a question from the poll website (v3.9)
 static int homeApp = APP_PICTURES;      // which app is in the middle of the carousel
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -551,6 +552,7 @@ void showScreen(int s) {
     case ST_RUMOURS:      showRumours();      return;  // Rumours.ino; plays in the background
     case ST_SLAP:         showSlap();         return;  // Sos.ino
     case ST_SLAPPED:      showSlapped();      return;  // Sos.ino; the incoming-slap takeover
+    case ST_VOTE:         voteArrive(); showVote(); return;  // Vote.ino; a question to answer
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -778,6 +780,7 @@ void handleTap(int16_t x, int16_t y) {
 
   if (screen == ST_SLAP)    { void slapTap(int x, int y);    slapTap(x, y);    lastActMs = millis() - t0; return; }
   if (screen == ST_SLAPPED) { void slappedTap(int x, int y); slappedTap(x, y); lastActMs = millis() - t0; return; }
+  if (screen == ST_VOTE)    { voteTap(x, y);    lastActMs = millis() - t0; return; }
 
   if (screen == ST_RUMOURS) {
     void rumoursTap(int x, int y);            // Rumours.ino
@@ -920,7 +923,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.8 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.9 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

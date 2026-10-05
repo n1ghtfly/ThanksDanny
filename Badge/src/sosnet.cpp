@@ -12,7 +12,7 @@ static QueueHandle_t s_rx = nullptr;
 static volatile bool s_connected = false;
 static char s_status[48] = "off";
 static char s_uri[112], s_cid[40], s_user[40], s_pass[72], s_online[48];
-static char s_subs[4][64];
+static char s_subs[SOSNET_MAX_SUBS][64];
 static int s_nsubs = 0;
 
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
@@ -44,7 +44,8 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
       break;
     case MQTT_EVENT_DATA:
       // Our messages are tiny and arrive in one piece; anything fragmented is not ours.
-      if (e->topic_len > 0 && e->topic_len < 64 && e->data_len < 64 && e->total_data_len == e->data_len) {
+      if (e->topic_len > 0 && e->topic_len < (int)sizeof(SosMsg::topic) &&
+          e->data_len < (int)sizeof(SosMsg::payload) && e->total_data_len == e->data_len) {
         SosMsg m;
         memcpy(m.topic, e->topic, e->topic_len);   m.topic[e->topic_len] = 0;
         memcpy(m.payload, e->data, e->data_len);   m.payload[e->data_len] = 0;
@@ -59,13 +60,13 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
 bool sosnet_start(const char *host, int port, bool tls, const char *clientId, const char *user,
                   const char *pass, const char *onlineTopic, const char *const *subs, int nsubs) {
   sosnet_stop();
-  if (!s_rx) s_rx = xQueueCreate(16, sizeof(SosMsg));
+  if (!s_rx) s_rx = xQueueCreate(24, sizeof(SosMsg));   // ~6.5 kB; a reconnect replays retained polls + votes
   snprintf(s_uri, sizeof(s_uri), "%s://%s:%d", tls ? "mqtts" : "mqtt", host, port);
   snprintf(s_cid, sizeof(s_cid), "%s", clientId);
   snprintf(s_user, sizeof(s_user), "%s", user);
   snprintf(s_pass, sizeof(s_pass), "%s", pass);
   snprintf(s_online, sizeof(s_online), "%s", onlineTopic);
-  s_nsubs = nsubs > 4 ? 4 : nsubs;
+  s_nsubs = nsubs > SOSNET_MAX_SUBS ? SOSNET_MAX_SUBS : nsubs;
   for (int i = 0; i < s_nsubs; i++) snprintf(s_subs[i], sizeof(s_subs[i]), "%s", subs[i]);
 
   esp_mqtt_client_config_t cfg = {};

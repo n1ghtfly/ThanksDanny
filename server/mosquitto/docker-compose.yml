@@ -10,6 +10,7 @@ services:
     restart: unless-stopped
     ports:
       - "8883:8883"
+      - "9001:9001"      # WebSockets for the poll website - LAN only, TLS in front (README section 9)
     volumes:
       - ./config:/mosquitto/config
       - ./certs:/mosquitto/certs:ro
