@@ -70,7 +70,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.10 build: 2,648,415 bytes (65% of the app partition), globals 23%
+- v3.10 build: 2,648,415 bytes (56% of the app partition), globals 23%
 
 ## Restore from scratch (new PC, or a wiped board)
 
