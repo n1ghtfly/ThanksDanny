@@ -559,6 +559,15 @@ The power-on picture and sound (v3.0) are gone: the badge goes straight to the h
 `Badge/Startup.ino`, `Badge/startup_assets.h`, `tools/prep_startup.py` and `preview_startup.png`.
 Build: **2,648,415 bytes** (56%, was 66% - the splash was ~470 kB of compiled-in picture and sound).
 
+## v3.11 - pictures, rumours and excuses straight from the repository
+
+New pictures were pushed but never reached the badges: GitHub Pages only publishes a push after a GitHub
+Actions job rebuilds the site, and during GitHub's Actions incident of 5 Oct 2026 that job sat queued and
+was then cancelled - so `list.txt` on the Pages site stayed at the old 6 pictures. The badges now download
+from `https://raw.githubusercontent.com/n1ghtfly/danny-pics-7f3c9a/main` (`PIC_HOST` in `Gallery.ino`),
+which serves pushed files directly (cached up to ~5 minutes) with no build step. The poll website still
+lives on Pages (it is a web page, and it rarely changes).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

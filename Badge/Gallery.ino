@@ -39,7 +39,11 @@
 #define ST_GALLERY_SYNC 5
 
 #define PICS_DIR   "/pics"
-#define PIC_HOST   "https://n1ghtfly.github.io/danny-pics-7f3c9a"
+// v3.11: straight from the repository (raw.githubusercontent.com) instead of the GitHub Pages site.
+// Pages only shows a push after a GitHub Actions job has rebuilt the site, and when Actions is slow
+// or down (5 Oct 2026: the job was queued, then cancelled) the badges never saw new pictures. The raw
+// address serves the pushed files directly (cached up to ~5 minutes). The poll website still uses Pages.
+#define PIC_HOST   "https://raw.githubusercontent.com/n1ghtfly/danny-pics-7f3c9a/main"
 
 #define MAX_PICS       40
 #define PANEL_PX       466

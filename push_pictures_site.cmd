@@ -15,8 +15,8 @@ if errorlevel 1 goto fail
 git push
 if errorlevel 1 goto fail
 echo.
-echo   Published. Check: https://n1ghtfly.github.io/danny-pics-7f3c9a/list.txt
-echo   (give GitHub Pages a minute or two), then restart the badge: it fetches new pictures
+echo   Published. Check: https://raw.githubusercontent.com/n1ghtfly/danny-pics-7f3c9a/main/list.txt
+echo   (up to 5 minutes), then restart the badge: it fetches new pictures
 echo   and rumours at start-up and deletes the ones you removed.
 echo.
 pause

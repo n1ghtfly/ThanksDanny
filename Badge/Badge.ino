@@ -923,7 +923,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.10 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.11 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

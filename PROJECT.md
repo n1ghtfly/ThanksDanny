@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.10, 5 Oct 2026)
+# Thanks Danny badge - project index (v3.11, 5 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.10)
+## What the badge does (v3.11)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
@@ -38,7 +38,7 @@ measurements); this page is the map.
    Rumours: add or delete files in `Downloads\ThanksDanny\mp3` (`[Speaker name] whatever.mp3`, max 24).
 2. Double-click **`update_badge_content.cmd`**: it converts everything for the badge, rebuilds the lists
    and publishes the site (needs Python + Pillow, and ffmpeg for the rumours).
-3. Wait a minute or two for GitHub Pages, then restart the badges. They download what is new and delete
+3. Wait a few minutes, then restart the badges. They download what is new and delete
    what you removed.
 
 ## Layout
