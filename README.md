@@ -625,6 +625,24 @@ UiSmall caps 8 px (was 7), UiBig 15 px (was 14), UiTitle 23 px (was 21). About 8
 - The "not connected" line now reads "<network> - not connected" so a long network name still fits.
 - Build: **2,724,427 bytes** (57%).
 
+## v3.15 - Radar: tap a plane for details
+
+`preview_radar_detail.png`. Tap a plane (or its callsign label) on the radar: a detail screen with callsign,
+airline, route (origin -> destination with cities), aircraft (type description + registration), and live
+altitude with climb/descent (fpm), speed (kt and km/h), heading, distance and direction from you, squawk
+(7500 / 7600 / 7700 shown red as EMERGENCY), owner. Refreshes every second from the live feed; if the plane
+leaves the fetched area it says "out of range - last seen Ns ago". Any tap = back to the radar.
+
+- **Live fields** come from the adsb.fi feed: `adsbparse.c` now also keeps hex, r, desc, ownOp, squawk and
+  baro_rate (else geom_rate).
+- **Route, airline, aircraft** come from [adsbdb.com](https://www.adsbdb.com) (free, no key), looked up once
+  when a plane is opened, by the radar's fetch task on core 0: `/v0/callsign/<callsign>` and
+  `/v0/aircraft/<hex>`. Read with `json_flat_field()` (new in `adsbparse.c`). No callsign -> only the aircraft.
+- Host test extended (`tools/test_adsbparse.c`): the new feed fields, and `json_flat_field` on adsbdb-style
+  answers (nested airline/origin/destination, exact key match, null, unknown callsign, truncation). All pass.
+- The aircraft lists (3 x 96 entries, ~130 bytes each now) moved to PSRAM.
+- Build: **2,730,751 bytes** (57%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

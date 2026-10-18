@@ -13,7 +13,8 @@
  * Screen: dark blue, four green range rings, N/E/S/W, range label on the east spoke. Aircraft
  * inside the outer ring: red triangle pointing along the track, magenta speed vector (one minute
  * of travel x1.5), callsign + altitude/type. Aircraft further out (still fetched): a red dot on
- * the rim at the right bearing. Tap = next range (5 / 10 / 15 / 25 km on ring 3), saved.
+ * the rim at the right bearing. Tap a plane = details (route, airline, aircraft - v3.15); tap anywhere
+ * else = next range (5 / 10 / 15 / 25 km on ring 3), saved.
  * HOME at the bottom or BOOT = home screen.
  *
  * Location: entered once on the phone setup page (Settings -> Setup on phone), stored only on the
@@ -46,7 +47,26 @@ static double   radarLat = 0, radarLon = 0;
 static bool     radarHaveLoc = false;
 static int      radarRange = 1;            // index into RADAR_RING3_KM
 
-static AdsbPlane radarPlanes[RADAR_MAX];   // shared with the fetch task, under radarLock
+static AdsbPlane *radarPlanes = nullptr;   // RADAR_MAX, in PSRAM; shared with the fetch task, under radarLock
+static AdsbPlane *radarTmp = nullptr;      // the fetch task's parse buffer
+static AdsbPlane *radarSnap = nullptr;     // the drawing copy
+
+// v3.15: tap a plane for details. Where each plane was drawn last frame, to find the tapped one.
+static int16_t  radarHitX[RADAR_MAX], radarHitY[RADAR_MAX], radarHitTx[RADAR_MAX], radarHitTw[RADAR_MAX];   // plane + its label
+static char     radarHitHex[RADAR_MAX][8];
+static int      radarHitN = 0;
+static bool     radarDetail = false;       // showing the detail screen
+static char     radarSelHex[8] = "";
+static AdsbPlane radarSel;                 // last known state of the selected plane
+static uint32_t radarSelSeen = 0, radarSelAt = 0;
+
+// Route / airline / aircraft from adsbdb.com, looked up once per selected plane (in the fetch task).
+struct RadarInfo {
+  char hex[8], call[9];
+  char airline[32], org[5], orgCity[24], dst[5], dstCity[24], maker[24], model[24], owner[28], reg[10];
+};
+static RadarInfo radarInfo;
+static volatile uint8_t radarInfoState = 0;   // 0 idle, 1 wanted, 2 looking up, 3 done
 static int      radarCount = 0;
 static uint32_t radarFetchedAt = 0;        // millis() of the last good fetch
 static char     radarStatus[40] = "";
@@ -82,6 +102,11 @@ static bool radarParseLoc(String s, double *lat, double *lon) {
 
 void radarLoadConfig() {
   if (!radarLock) radarLock = xSemaphoreCreateMutex();
+  if (!radarPlanes) {
+    radarPlanes = (AdsbPlane *)ps_malloc(sizeof(AdsbPlane) * RADAR_MAX);
+    radarTmp    = (AdsbPlane *)ps_malloc(sizeof(AdsbPlane) * RADAR_MAX);
+    radarSnap   = (AdsbPlane *)ps_malloc(sizeof(AdsbPlane) * RADAR_MAX);
+  }
   radarPrefs.begin("radar", true);
   radarHaveLoc = radarPrefs.getBool("have", false);
   radarLat = radarPrefs.getDouble("lat", 0);
@@ -182,11 +207,74 @@ static bool radarFetchOnce(AdsbPlane *tmp, int *n) {
   return false;
 }
 
+// One small HTTPS GET into a String (adsbdb answers are ~1 kB).
+static int radarGet(const char *url, String &out) {
+  int code = -1;
+  for (int attempt = 0; attempt < 2; attempt++) {
+    NetworkClientSecure client;
+    if (attempt == 0) client.useBuiltinCACertBundle();
+    else              client.setInsecure();
+    HTTPClient http;
+    http.useHTTP10(true);
+    http.setConnectTimeout(6000);
+    http.setTimeout(6000);
+    if (!http.begin(client, url)) continue;
+    code = http.GET();
+    if (code == 200) out = http.getString();
+    http.end();
+    if (code > 0) break;                              // a real answer: no insecure retry
+  }
+  return code;
+}
+
+// Route + aircraft for the selected plane, from adsbdb.com (free, no key).
+static void radarLookup() {
+  radarInfoState = 2;
+  RadarInfo r;
+  memset(&r, 0, sizeof(r));
+  memcpy(r.hex, radarInfo.hex, sizeof(r.hex));
+  memcpy(r.call, radarInfo.call, sizeof(r.call));
+  char url[96];
+  String body;
+  bool isCall = r.call[0] && strcmp(r.call, r.hex);    // no callsign -> the hex stands in for it
+  if (isCall) {
+    snprintf(url, sizeof(url), "https://api.adsbdb.com/v0/callsign/%s", r.call);
+    int code = radarGet(url, body);
+    if (code == 200) {
+      const char *b = body.c_str();
+      json_flat_field(b, "airline", "name", r.airline, sizeof(r.airline));
+      json_flat_field(b, "origin", "iata_code", r.org, sizeof(r.org));
+      json_flat_field(b, "origin", "municipality", r.orgCity, sizeof(r.orgCity));
+      json_flat_field(b, "destination", "iata_code", r.dst, sizeof(r.dst));
+      json_flat_field(b, "destination", "municipality", r.dstCity, sizeof(r.dstCity));
+    }
+    Serial.printf("radar  : route %s -> HTTP %d %s-%s\n", r.call, code, r.org, r.dst);
+  }
+  if (r.hex[0]) {
+    snprintf(url, sizeof(url), "https://api.adsbdb.com/v0/aircraft/%s", r.hex);
+    body = "";
+    int code = radarGet(url, body);
+    if (code == 200) {
+      const char *b = body.c_str();
+      json_flat_field(b, "aircraft", "manufacturer", r.maker, sizeof(r.maker));
+      json_flat_field(b, "aircraft", "type", r.model, sizeof(r.model));
+      json_flat_field(b, "aircraft", "registered_owner", r.owner, sizeof(r.owner));
+      json_flat_field(b, "aircraft", "registration", r.reg, sizeof(r.reg));
+    }
+    Serial.printf("radar  : aircraft %s -> HTTP %d %s %s\n", r.hex, code, r.maker, r.model);
+  }
+  xSemaphoreTake(radarLock, portMAX_DELAY);
+  if (!strcmp(radarInfo.hex, r.hex)) { radarInfo = r; radarInfoState = 3; }   // still the same plane?
+  xSemaphoreGive(radarLock);
+}
+
 static void radarTask(void *) {
-  static AdsbPlane tmp[RADAR_MAX];
+  AdsbPlane *tmp = radarTmp;
   uint32_t last = 0;
   while (radarRun) {
+    if (!tmp) { vTaskDelay(pdMS_TO_TICKS(500)); continue; }
     if (WiFi.status() != WL_CONNECTED) { snprintf(radarStatus, sizeof(radarStatus), "no Wi-Fi"); vTaskDelay(pdMS_TO_TICKS(500)); continue; }
+    if (radarInfoState == 1) radarLookup();          // a plane was tapped: details first
     if (last && millis() - last < RADAR_FETCH_MS) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
     last = millis();
     int n = 0;
@@ -221,7 +309,7 @@ static void radarStart() {
     radarTaskAlive = false;
 }
 
-void radarStop() { radarRun = false; }               // the task ends after its current request
+void radarStop() { radarRun = false; radarDetail = false; }   // the task ends after its current request
 
 // ---------------------------------------------------------------- drawing
 
@@ -307,7 +395,9 @@ void showRadar() {
     return;
   }
   radarStart();
-  static AdsbPlane snap[RADAR_MAX];
+  if (radarDetail) { radarDrawDetail(); return; }
+  AdsbPlane *snap = radarSnap;
+  if (!snap || !radarPlanes) return;
   int n; uint32_t at; char status[40];
   xSemaphoreTake(radarLock, portMAX_DELAY);
   n = radarCount; at = radarFetchedAt;
@@ -318,12 +408,22 @@ void showRadar() {
   radarGrid(cx, cy);
   float pxPerKm = RADAR_R / radarOuterKm();
   int inside = 0;
+  radarHitN = 0;
   for (int i = 0; i < n; i++) {
     float dx, dy;
     radarPos(snap[i], at, &dx, &dy);
     float r = sqrtf(dx * dx + dy * dy) * pxPerKm;
     if (r <= RADAR_R - 6) {
-      radarPlane(snap[i], cx + (int)(dx * pxPerKm), cy - (int)(dy * pxPerKm), cx, cy);
+      int px = cx + (int)(dx * pxPerKm), py = cy - (int)(dy * pxPerKm);
+      radarPlane(snap[i], px, py, cx, cy);
+      if (radarHitN < RADAR_MAX) {
+        radarHitX[radarHitN] = px; radarHitY[radarHitN] = py;
+        int tw = (int)strlen(snap[i].flight) * 12, tx = px + 14;
+        if (tx > cx + RADAR_R - 70) tx = px - 14 - tw;   // same flip as radarPlane()
+        radarHitTx[radarHitN] = tx; radarHitTw[radarHitN] = tw;
+        memcpy(radarHitHex[radarHitN], snap[i].hex, 8);
+        radarHitN++;
+      }
       inside++;
     } else if (r > 0) {                               // beyond the ring: a dot on the rim, right bearing
       int rx = cx + (int)(dx * pxPerKm / r * (RADAR_R + 14)), ry = cy - (int)(dy * pxPerKm / r * (RADAR_R + 14));
@@ -342,6 +442,124 @@ void showRadar() {
   gfx->flush();
 }
 
+// ---------------------------------------------------------------- detail screen (v3.15)
+
+static const char *radarCompass(float deg) {
+  static const char *P[8] = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+  int i = (int)floorf(fmodf(deg + 360.0f + 22.5f, 360.0f) / 45.0f);
+  return P[i & 7];
+}
+
+static void radarOpenDetail(const char *hex) {
+  xSemaphoreTake(radarLock, portMAX_DELAY);
+  bool found = false;
+  for (int i = 0; i < radarCount; i++)
+    if (!strcmp(radarPlanes[i].hex, hex)) { radarSel = radarPlanes[i]; radarSelAt = radarFetchedAt; found = true; break; }
+  if (found) {
+    snprintf(radarSelHex, sizeof(radarSelHex), "%s", hex);
+    radarSelSeen = millis();
+    memset(&radarInfo, 0, sizeof(radarInfo));
+    snprintf(radarInfo.hex, sizeof(radarInfo.hex), "%s", radarSel.hex);
+    snprintf(radarInfo.call, sizeof(radarInfo.call), "%s", radarSel.flight);
+    radarInfoState = 1;                               // the fetch task looks it up next
+  }
+  xSemaphoreGive(radarLock);
+  if (!found) return;
+  radarDetail = true;
+  Serial.printf("radar  : details for %s (%s)\n", radarSel.flight, radarSel.hex);
+  radarDrawDetail();
+}
+
+// Centred text in the larger UI font if it fits the width, else the small one.
+static void radarFit(int yTop, const char *s, uint16_t c, int maxW) {
+  int16_t x1, y1; uint16_t w, h;
+  gfx->setFont(&UiBig); gfx->setTextSize(1);
+  gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
+  gfx->setFont();
+  if (w <= maxW) uiCentred(yTop, s, &UiBig, c);
+  else           uiCentred(yTop + 4, s, &UiSmall, c);
+}
+
+static void radarRow(int y, const char *label, const char *value, uint16_t c) {
+  uiText(96, y + 7, label, &UiSmall, RGB565(130, 150, 175));
+  uiText(196, y, value, &UiBig, c);
+}
+
+void radarDrawDetail() {
+  // Fresh data for the selected plane, if it is still in the feed.
+  xSemaphoreTake(radarLock, portMAX_DELAY);
+  for (int i = 0; i < radarCount; i++)
+    if (!strcmp(radarPlanes[i].hex, radarSelHex)) {
+      if (radarFetchedAt != radarSelAt || radarSelSeen == 0) { radarSel = radarPlanes[i]; radarSelAt = radarFetchedAt; }
+      radarSelSeen = millis();
+      break;
+    }
+  RadarInfo info = radarInfo;
+  uint8_t ist = radarInfoState;
+  xSemaphoreGive(radarLock);
+  const AdsbPlane &a = radarSel;
+  bool lost = millis() - radarSelSeen > 15000;
+
+  gfx->fillScreen(RADAR_BG);
+  const uint16_t white = RGB565(240, 240, 240), grey = RGB565(140, 155, 180), amber = RADAR_TAG2;
+  char t[64];
+
+  uiCentred(40, a.flight, &UiTitle, white);
+  const char *who = info.airline[0] ? info.airline : (a.op[0] ? a.op : info.owner);
+  if (who[0]) uiCentred(76, who, &UiSmall, amber);
+
+  // Route
+  if (info.org[0] && info.dst[0]) {
+    snprintf(t, sizeof(t), "%s  ->  %s", info.org, info.dst);
+    uiCentred(100, t, &UiBig, white);
+    if (info.orgCity[0] || info.dstCity[0]) {
+      snprintf(t, sizeof(t), "%s -> %s", info.orgCity, info.dstCity);
+      uiCentred(124, t, &UiSmall, grey);
+    }
+  } else {
+    uiCentred(108, ist == 3 ? "route unknown" : "looking up the route...", &UiSmall, grey);
+  }
+
+  // Aircraft: the feed's description, else adsbdb's maker + model; plus the registration
+  const char *reg = a.reg[0] ? a.reg : info.reg;
+  if (a.desc[0])                     snprintf(t, sizeof(t), "%s  %s", a.desc, reg);
+  else if (info.maker[0])            snprintf(t, sizeof(t), "%s %s  %s", info.maker, info.model, reg);
+  else                               snprintf(t, sizeof(t), "%s  %s", a.type, reg);
+  radarFit(150, t, white, 360);
+
+  // Live numbers
+  if (a.has_alt) {
+    if (a.has_vrate && abs(a.vrate) >= 200) snprintf(t, sizeof(t), "%d ft  %s%d", a.alt, a.vrate > 0 ? "^" : "v", abs(a.vrate));
+    else                                     snprintf(t, sizeof(t), "%d ft  level", a.alt);
+  } else snprintf(t, sizeof(t), "-");
+  radarRow(190, "ALTITUDE", t, white);
+  snprintf(t, sizeof(t), "%.0f kt  %.0f km/h", a.gs, a.gs * 1.852f);
+  radarRow(222, "SPEED", t, white);
+  snprintf(t, sizeof(t), "%.0f  %s", a.track, radarCompass(a.track));
+  radarRow(254, "HEADING", t, white);
+  float dx, dy;
+  radarPos(a, radarSelAt, &dx, &dy);
+  float km = sqrtf(dx * dx + dy * dy), brg = atan2f(dx, dy) * 180.0f / PI;
+  snprintf(t, sizeof(t), "%.1f km  %s", km, radarCompass(brg));
+  radarRow(286, "DISTANCE", t, white);
+  bool emergency = !strcmp(a.squawk, "7500") || !strcmp(a.squawk, "7600") || !strcmp(a.squawk, "7700");
+  snprintf(t, sizeof(t), "%s%s", a.squawk[0] ? a.squawk : "-", emergency ? "  EMERGENCY" : "");
+  radarRow(318, "SQUAWK", t, emergency ? RGB565(255, 70, 70) : white);
+
+  if (info.owner[0] && strcmp(info.owner, who)) {
+    snprintf(t, sizeof(t), "owner: %s", info.owner);
+    uiCentred(352, t, &UiSmall, grey);
+  }
+  if (lost) {
+    snprintf(t, sizeof(t), "out of range - last seen %lus ago", (unsigned long)((millis() - radarSelSeen) / 1000));
+    uiCentred(374, t, &UiSmall, RGB565(255, 150, 90));
+  }
+  gfx->fillRoundRect(168, 396, 130, 40, 14, RGB565(10, 14, 30));
+  gfx->drawRoundRect(168, 396, 130, 40, 14, RGB565(120, 200, 255));
+  uiCentred(408, "BACK", &UiBig, white);
+  gfx->flush();
+}
+
 // From loop() while the radar is up: redraw (planes glide), and shift the picture every minute.
 void radarTick() {
   if (millis() - radarLastFrame < RADAR_FRAME_MS) return;
@@ -349,11 +567,33 @@ void radarTick() {
   int m = (millis() / 60000) % 8;
   static const int8_t SX[8] = { 0, 2, 3, 2, 0, -2, -3, -2 }, SY[8] = { -3, -2, 0, 2, 3, 2, 0, -2 };
   radarOx = SX[m]; radarOy = SY[m];
-  if (radarHaveLoc) showRadar();
+  if (!radarHaveLoc) return;
+  if (radarDetail) {                                 // the detail screen: once a second is plenty
+    static uint32_t lastDetail = 0;
+    if (millis() - lastDetail < 1000) return;
+    lastDetail = millis();
+  }
+  showRadar();
 }
 
 void radarTap(int x, int y) {
+  if (radarDetail) {                                 // detail screen: any tap goes back to the radar
+    radarDetail = false;
+    showRadar();
+    return;
+  }
   if (y >= 420 && x > 150 && x < 316) { showScreen(ST_HOME); return; }
+  // A plane under the finger? (nearest drawn plane within 36 px)
+  int best = -1; long bestD = 36L * 36L;
+  for (int i = 0; i < radarHitN; i++) {
+    long dx = x - radarHitX[i], dy = y - radarHitY[i], d = dx * dx + dy * dy;
+    if (d <= bestD) { bestD = d; best = i; }
+  }
+  if (best < 0)                                      // or its callsign label
+    for (int i = 0; i < radarHitN; i++)
+      if (x >= radarHitTx[i] - 6 && x <= radarHitTx[i] + radarHitTw[i] + 6 &&
+          y >= radarHitY[i] - 20 && y <= radarHitY[i] + 20) { best = i; break; }
+  if (best >= 0) { radarOpenDetail(radarHitHex[best]); return; }
   radarRange = (radarRange + 1) % 4;
   radarSaveConfig();
   Serial.printf("radar  : range %.0f km\n", RADAR_RING3_KM[radarRange]);
