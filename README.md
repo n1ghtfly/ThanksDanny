@@ -612,6 +612,19 @@ no ArduinoJson).
 - The mDNS name follows the badge name chosen in Settings from the next start-up.
 - Build: **2,713,035 bytes** (57%).
 
+## v3.14 - bigger, sharper text on the home screen and in Settings
+
+`preview_fonts.png` (before / after). The built-in 6x8 font only scales in whole steps, so "10% bigger" uses
+a real typeface: DejaVu Sans Bold (Bitstream Vera licence, free to embed) converted to Adafruit-GFX fonts by
+`tools/make_ui_fonts.py` into `Badge/ui_fonts.h`, each sized by capital height to 110% of the text it replaces:
+UiSmall caps 8 px (was 7), UiBig 15 px (was 14), UiTitle 23 px (was 21). About 8 kB of flash.
+
+- Used for the home pill (app name + network line) and the whole Settings menu. `uiText()` / `uiCentred()` in
+  `Badge.ino` take the top of the capitals (like `setCursor` with the built-in font) and always restore the
+  built-in font, so every other screen is unchanged.
+- The "not connected" line now reads "<network> - not connected" so a long network name still fits.
+- Build: **2,724,427 bytes** (57%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

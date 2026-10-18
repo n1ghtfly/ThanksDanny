@@ -65,6 +65,7 @@
 #include <math.h>
 #include <time.h>
 #include "TouchDrvCSTXXX.hpp"
+#include "ui_fonts.h"                   // v3.14: DejaVu Sans Bold for home + Settings (tools/make_ui_fonts.py)
 #include "src/adsbparse.h"            // Radar.ino; here so the auto-generated prototypes know AdsbPlane
 
 // The gallery does TLS work several call levels below loop() (loop -> pollTouch -> handleTap ->
@@ -289,6 +290,29 @@ void button(int x, int y, int w, int h, uint16_t fill, uint16_t outline) {
   gfx->drawRoundRect(x, y, w, h, 12, outline);
 }
 
+// v3.14: text in a UI font (ui_fonts.h). yTop is the top of the capitals, the same spot
+// setCursor() means for the built-in font, so layouts carry over. Always restores the built-in font.
+int uiCap(const GFXfont *f) { return -f->glyph['H' - f->first].yOffset; }
+void uiText(int x, int yTop, const char *s, const GFXfont *f, uint16_t colour) {
+  gfx->setFont(f);
+  gfx->setTextSize(1);
+  gfx->setTextColor(colour);
+  gfx->setCursor(x, yTop + uiCap(f));
+  gfx->print(s);
+  gfx->setFont();
+}
+void uiCentred(int yTop, const char *s, const GFXfont *f, uint16_t colour) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  gfx->setFont(f);
+  gfx->setTextSize(1);
+  gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
+  gfx->setTextColor(colour);
+  gfx->setCursor(LCD_WIDTH / 2 - (int)w / 2 - x1, yTop + uiCap(f));
+  gfx->print(s);
+  gfx->setFont();
+}
+
 void centred(int y, const char *s, uint8_t size, uint16_t colour) {
   int16_t w = strlen(s) * 6 * size;
   gfx->setTextSize(size);
@@ -356,7 +380,7 @@ void drawCarousel(float p) {
   // Name pill: the app in the middle, and the network state on a second line.
   gfx->fillRoundRect(HPILL_X, HPILL_Y, HPILL_W, HPILL_H, 14, RGB565(10, 10, 14));
   gfx->drawRoundRect(HPILL_X, HPILL_Y, HPILL_W, HPILL_H, 14, RGB565(70, 70, 86));
-  centred(HPILL_Y + 7, APP_NAME[shown], 2, RGB565_WHITE);
+  uiCentred(HPILL_Y + 6, APP_NAME[shown], &UiBig, RGB565_WHITE);
   char net[40];
   uint16_t nc;
   bool sosConfigured(); int sosOnlineCount(); bool sosnet_connected();
@@ -366,7 +390,7 @@ void drawCarousel(float p) {
   else if (apRunning)                { snprintf(net, sizeof(net), "setup: join %s", AP_SSID); nc = RGB565(150, 220, 255); }
   else if (connecting)               { snprintf(net, sizeof(net), "wifi: connecting..."); nc = RGB565(255, 220, 120); }
   else                               { snprintf(net, sizeof(net), "wifi: not connected"); nc = RGB565(255, 200, 120); }
-  centred(HPILL_Y + 29, net, 1, nc);
+  uiCentred(HPILL_Y + 29, net, &UiSmall, nc);
 }
 
 void drawHome() {
@@ -455,52 +479,36 @@ void handleSwipe(int dir) {
 
 void drawMenu() {
   gfx->fillScreen(RGB565(12, 12, 16));
-  centred(26, "Settings", 3, RGB565_WHITE);
+  uiCentred(26, "Settings", &UiTitle, RGB565_WHITE);
   gfx->drawFastHLine(ROW_X, 78, ROW_W, RGB565(60, 60, 72));
   const char *sosMeLabel();
   bool sosIsMuted();
+  const uint16_t sub = RGB565(150, 200, 255);
+  char t[48], u[64];
 
   int y = ROW_Y0;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 9);
-  gfx->print("Setup on phone");
-  gfx->setTextSize(1);
-  gfx->setTextColor(RGB565(150, 200, 255));
-  gfx->setCursor(ROW_X + 18, y + 34);
-  if (WiFi.status() == WL_CONNECTED)      gfx->printf("Wi-Fi + broker - connected %s", WiFi.localIP().toString().c_str());
-  else if (wifiSSID.length())             gfx->printf("Wi-Fi + broker - %s not connected", wifiSSID.c_str());
-  else                                    gfx->print("Wi-Fi + broker - nothing saved yet");
+  uiText(ROW_X + 18, y + 9, "Setup on phone", &UiBig, RGB565_WHITE);
+  if (WiFi.status() == WL_CONNECTED) snprintf(u, sizeof(u), "Wi-Fi + broker - connected %s", WiFi.localIP().toString().c_str());
+  else if (wifiSSID.length())        snprintf(u, sizeof(u), "%s - not connected", wifiSSID.c_str());
+  else                               snprintf(u, sizeof(u), "Wi-Fi + broker - nothing saved yet");
+  uiText(ROW_X + 18, y + 33, u, &UiSmall, sub);
 
   y += ROW_H + ROW_GAP;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 9);
-  gfx->printf("This badge: %s", sosMeLabel());
-  gfx->setTextSize(1);
-  gfx->setTextColor(RGB565(150, 200, 255));
-  gfx->setCursor(ROW_X + 18, y + 34);
-  gfx->print("tap to change: Claudio / Danny / Walter");
+  snprintf(t, sizeof(t), "This badge: %s", sosMeLabel());
+  uiText(ROW_X + 18, y + 9, t, &UiBig, RGB565_WHITE);
+  uiText(ROW_X + 18, y + 33, "tap to change: Claudio / Danny / Walter", &UiSmall, sub);
 
   y += ROW_H + ROW_GAP;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 9);
-  gfx->printf("Slap sound: %s", sosIsMuted() ? "OFF" : "ON");
-  gfx->setTextSize(1);
-  gfx->setTextColor(RGB565(150, 200, 255));
-  gfx->setCursor(ROW_X + 18, y + 34);
-  gfx->print(sosIsMuted() ? "slaps arrive silently (meeting mode)" : "tap to mute for meetings");
+  snprintf(t, sizeof(t), "Slap sound: %s", sosIsMuted() ? "OFF" : "ON");
+  uiText(ROW_X + 18, y + 9, t, &UiBig, RGB565_WHITE);
+  uiText(ROW_X + 18, y + 33, sosIsMuted() ? "slaps arrive silently (meeting mode)" : "tap to mute for meetings", &UiSmall, sub);
 
   y += ROW_H + ROW_GAP;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  gfx->setTextSize(2);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(ROW_X + 18, y + 20);
-  gfx->print("Close");
+  uiText(ROW_X + 18, y + 20, "Close", &UiBig, RGB565_WHITE);
 
   Serial.printf("ui     : settings (%d rows, last ends at y=%d)\n", ROW_COUNT, y + ROW_H);
 }
@@ -978,7 +986,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.13 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.14 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
