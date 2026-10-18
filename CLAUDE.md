@@ -17,13 +17,14 @@ Private details (broker host, LAN IPs, what is set up where) are in `NOTES_local
 - Libraries: GFX Library for Arduino 1.6.x, SensorLib 0.5.x (`ImuDrv.hpp`, not the deprecated
   SensorQMI8658), TJpg_Decoder. MP3 = vendored Helix decoder in `Badge/src/helix`; MQTT = esp-mqtt
   (built into the core) wrapped in `Badge/src/sosnet.cpp`.
+- Host tests: `tools/test_adsbparse.c` (radar JSON parser) - run it after touching `Badge/src/adsbparse.c`.
 - After a change: build, check flash use (~56% now), bump the version string in `Badge.ino` setup(),
   update `PROJECT.md` + add a `README.md` section.
 
 ## Code layout and rules
 
-- `Badge/*.ino` are concatenated alphabetically after `Badge.ino` (Decider, Gallery, Nope, Rumours,
-  Screensaver, Sos, Vote). A file can use *functions* from later files (Arduino auto-prototypes them)
+- `Badge/*.ino` are concatenated alphabetically after `Badge.ino` (Decider, Gallery, Nope, Radar,
+  Rumours, Screensaver, Sos, Vote). A file can use *functions* from later files (Arduino auto-prototypes them)
   but not *variables/macros* from later files. Keep function signatures to primitive types.
 - Screens are `ST_*` in `Badge.ino`; `showScreen()` draws, `handleTap()` routes taps.
   Everything draws into a PSRAM canvas; use `flushRect()` for partial updates (even coordinates).

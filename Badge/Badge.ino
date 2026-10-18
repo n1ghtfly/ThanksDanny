@@ -64,6 +64,7 @@
 #include <math.h>
 #include <time.h>
 #include "TouchDrvCSTXXX.hpp"
+#include "src/adsbparse.h"            // Radar.ino; here so the auto-generated prototypes know AdsbPlane
 
 // The gallery does TLS work several call levels below loop() (loop -> pollTouch -> handleTap ->
 // showScreen -> showGallery -> syncPictures), and mbedTLS needs a few kB of stack of its own.
@@ -123,13 +124,14 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 static const int SLOT_X[5] = { -40, 104, 233, 362, 506 };
 static const int SLOT_Y[5] = { 318, 302, 290, 302, 318 };
 static const int SLOT_R[5] = {  20,  36,  60,  36,  20 };
-#define APP_COUNT   5
+#define APP_COUNT   6
 #define APP_PICTURES 0
 #define APP_DECIDER  1
 #define APP_RUMOURS  2
 #define APP_SLAP     3
-#define APP_SETTINGS 4
-static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "SETTINGS" };
+#define APP_RADAR    4                   // v3.12
+#define APP_SETTINGS 5
+static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "SETTINGS" };
 #define DOTS_Y      360                  // page dots, between the icon and the pill
 #define HPILL_X     118                  // home pill: app name + Wi-Fi line
 #define HPILL_Y     372
@@ -179,6 +181,7 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_SLAP         8               // Sos.ino: pick a victim, swing to slap
 #define ST_SLAPPED      9               // Sos.ino: you just got slapped
 #define ST_VOTE        10               // Vote.ino: a question from the poll website (v3.9)
+#define ST_RADAR       11               // Radar.ino: live aircraft around you (v3.12)
 static int homeApp = APP_PICTURES;      // which app is in the middle of the carousel
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -312,6 +315,7 @@ void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
     case APP_DECIDER:  drawDeciderIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
     case APP_RUMOURS:  drawRumoursIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
     case APP_SLAP:     drawSlapIcon(cx, cy, (R * 70) / 100, fg, RGB565(12, 12, 18));    break;
+    case APP_RADAR:    drawRadarIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));   break;
     case APP_SETTINGS: drawCog(cx, cy, (R * 52) / 100, fg, RGB565(12, 12, 18));        break;
   }
 }
@@ -403,6 +407,7 @@ void openApp(int app) {
     case APP_DECIDER:  showScreen(ST_DECIDER); break;
     case APP_RUMOURS:  showScreen(ST_RUMOURS); break;
     case APP_SLAP:     { extern int slapState; slapState = 0; showScreen(ST_SLAP); } break;
+    case APP_RADAR:    showScreen(ST_RADAR);   break;
     case APP_SETTINGS: showScreen(ST_MENU);    break;
   }
 }
@@ -540,6 +545,7 @@ void showScreen(int s) {
   if (saverIntercept(s)) return;               // Screensaver.ino: a hidden refresh, or a wake-up
   void rumoursStop();                          // Rumours.ino
   if (s != ST_RUMOURS) rumoursStop();          // leaving Rumours silences it
+  if (s != ST_RADAR) radarStop();              // leaving Radar stops its downloads
   screen = s;
   uint32_t t0 = millis();
   switch (s) {
@@ -553,6 +559,7 @@ void showScreen(int s) {
     case ST_SLAP:         showSlap();         return;  // Sos.ino
     case ST_SLAPPED:      showSlapped();      return;  // Sos.ino; the incoming-slap takeover
     case ST_VOTE:         voteArrive(); showVote(); return;  // Vote.ino; a question to answer
+    case ST_RADAR:        showRadar();        return;  // Radar.ino; redrawn by radarTick()
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -641,6 +648,7 @@ String buildPage() {
             "The badge does not display or log it.</p>");
   String sosSetupForm();                // Sos.ino: badge name + MQTT broker
   page += sosSetupForm();
+  page += radarSetupForm();             // Radar.ino: the radar's centre
   page += F("</body>");
   return page;
 }
@@ -691,6 +699,7 @@ void startSetupAP() {
     server.on("/rescan", handleRescan);
     server.on("/save", HTTP_POST, handleSave);
     server.on("/sos", HTTP_POST, []() { void sosHandleSave(); sosHandleSave(); });
+    server.on("/radar", HTTP_POST, []() { radarHandleSave(); });
     server.onNotFound([]() { server.send(200, "text/html", buildPage()); });
     server.begin();
     apRunning = true;
@@ -781,6 +790,7 @@ void handleTap(int16_t x, int16_t y) {
   if (screen == ST_SLAP)    { void slapTap(int x, int y);    slapTap(x, y);    lastActMs = millis() - t0; return; }
   if (screen == ST_SLAPPED) { void slappedTap(int x, int y); slappedTap(x, y); lastActMs = millis() - t0; return; }
   if (screen == ST_VOTE)    { voteTap(x, y);    lastActMs = millis() - t0; return; }
+  if (screen == ST_RADAR)   { radarTap(x, y);   lastActMs = millis() - t0; return; }
 
   if (screen == ST_RUMOURS) {
     void rumoursTap(int x, int y);            // Rumours.ino
@@ -923,7 +933,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.11 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.12 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -979,6 +989,7 @@ void setup() {
 
   void sosLoadConfig(); void sosImuBegin();    // Sos.ino: badge name + broker, and the motion sensor
   sosLoadConfig();
+  radarLoadConfig();                           // Radar.ino: location + range
   sosImuBegin();
 
 
@@ -1052,6 +1063,7 @@ void loop() {
   if (screen == ST_RUMOURS && !saverActive()) { void rumoursTick(); rumoursTick(); }   // sound bars
   void sosPoll(); sosPoll();                                          // badge network: slaps, presence
   if (screen == ST_SLAP && !saverActive()) { void sosTick(); sosTick(); }   // swing detection
+  if (screen == ST_RADAR && !saverActive()) radarTick();             // aircraft glide, fresh data
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
   // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
   // printed just before it in the log show what was running.

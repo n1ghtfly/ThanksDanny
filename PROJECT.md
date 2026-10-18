@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.11, 5 Oct 2026)
+# Thanks Danny badge - project index (v3.12, 18 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.11)
+## What the badge does (v3.12)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
@@ -23,6 +23,10 @@ measurements); this page is the map.
 - **Ask the Council** (poll website, `web/poll.html` -> GitHub Pages `poll/`): ask a question with 2-4
   answers; every badge pops it up ("CLAUDIO ASKS:") with answer buttons, then shows live results. Votes
   can also be cast on the website. Needs Mosquitto's WebSocket listener (`server/mosquitto/README.md` section 9).
+- **Radar**: live aircraft around you from adsb.fi on a sonar-style grid - heading triangles, speed
+  vectors, callsign / altitude / type, planes gliding between updates (every 5 s). Tap = range
+  (5 / 10 / 15 / 25 km), HOME or BOOT = home. Your location is typed once on the phone setup page.
+  Based on MatixYo/ESP32-Plane-Radar (MIT).
 - **Settings**: Wi-Fi setup on the phone (the badge raises its own `ThanksDanny-setup`
   network; also the badge network login), this badge's name, slap sound on/off, close.
 - **Screensaver (SOS MARKETS)**: after 1 minute without a touch the badge dims to a Bloomberg-style
@@ -45,7 +49,7 @@ measurements); this page is the map.
 
 | Folder / file | What it is |
 |---|---|
-| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, carousel, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Sos.ino` (badge network + Slap), `Screensaver.ino` (SOS MARKETS screensaver), `Nope.ino` (Danny's excuses), `Vote.ino` (questions from the poll website), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
+| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, carousel, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Sos.ino` (badge network + Slap), `Screensaver.ino` (SOS MARKETS screensaver), `Nope.ino` (Danny's excuses), `Vote.ino` (questions from the poll website), `Radar.ino` + `src/adsbparse.c` (plane radar), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
 | `tools/flash_badge.cmd` | Double-click: clean build + upload + boot log. |
 | `tools/prep_decider.py` | `assets/chooser` badges -> `Badge/decider_assets.h` |
 | `tools/prep_decider_sound.py` | `assets/chooser/drummroll.mp3` -> `Badge/decider_sound.h` (needs ffmpeg) |
@@ -70,7 +74,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.10 build: 2,648,415 bytes (56% of the app partition), globals 23%
+- v3.12 build: 2,675,155 bytes (56% of the app partition), globals 23%
 
 ## Restore from scratch (new PC, or a wiped board)
 

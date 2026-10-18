@@ -568,6 +568,35 @@ from `https://raw.githubusercontent.com/n1ghtfly/danny-pics-7f3c9a/main` (`PIC_H
 which serves pushed files directly (cached up to ~5 minutes) with no build step. The poll website still
 lives on Pages (it is a web page, and it rarely changes).
 
+## v3.12 - RADAR app (live aircraft)
+
+`preview_radar.png`. A sixth carousel app, modelled on
+[MatixYo/ESP32-Plane-Radar](https://github.com/MatixYo/ESP32-Plane-Radar) (MIT, (c) 2026 MatixYo) - same
+idea, data source and look, rebuilt for this badge (466 px instead of 240, Arduino_GFX instead of LovyanGFX,
+no ArduinoJson).
+
+- **Data**: `https://opendata.adsb.fi/api/v3/lat/<lat>/lon/<lon>/dist/<nm>` every 5 s while the app is open
+  (radius = outer ring x 1.3), in a task on core 0 (`Badge/Radar.ino`). HTTP/1.0 so the body is never chunked;
+  certificate checked against the core's CA bundle, unvalidated retry only if that fails to connect.
+  Aircraft on the ground are left out; up to 96 kept.
+- **Parser**: `Badge/src/adsbparse.c` - a ~170-line streaming JSON reader in plain C that keeps lat/lon,
+  track (else true_heading), gs (else tas), alt_baro (else alt_geom), seen_pos, flight (else hex), t, and skips
+  everything else including nested arrays/objects. Host test `tools/test_adsbparse.c`
+  (`gcc -I../Badge/src test_adsbparse.c ../Badge/src/adsbparse.c -lm`): readsb-format sample with nav_modes,
+  mlat/tisb arrays, a nested object, escaped quotes, "ground", null, missing fields, limit, empty and error
+  documents, a truncated body and an HTML error page - all pass.
+- **Screen**: four green rings (outer radius 200 px), N/E/W outside, S inside (HOME sits below), range label on
+  the east spoke. Inside the ring: red triangle along the track, magenta vector = 1 min of travel x 1.5 (clipped
+  at the ring), callsign (size 2) + "altitude ft type" (size 1, amber). Outside the ring: red rim dot at the
+  bearing. Positions are dead-reckoned from the fix (age + seen_pos) along track at ground speed, redrawn every
+  300 ms. The whole picture shifts a few px every minute (burn-in: this screen is meant to stay on).
+- **Controls**: tap = next range (ring 3 = 5 / 10 / 15 / 25 km, saved); HOME pill or BOOT = home.
+- **Location**: phone setup page -> "Plane radar" -> one field ("52.3676, 4.9041", decimal commas and the
+  "52,3676,4,9041" form accepted). Stored in NVS "radar", never logged, never in the repo. Optional default in
+  `Badge/sos_local.h`: `#define RADAR_DEFAULT_LAT ...` / `RADAR_DEFAULT_LON ...`.
+- Not ported: the runway overlay (a 2,900-line airport table) and the miles option.
+- Build: **2,675,155 bytes** (56%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
