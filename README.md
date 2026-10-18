@@ -597,6 +597,21 @@ no ArduinoJson).
 - Not ported: the runway overlay (a 2,900-line airport table) and the miles option.
 - Build: **2,675,155 bytes** (56%).
 
+## v3.13 - setup page always reachable
+
+- The setup page (Wi-Fi, badge network, radar location) is now served on every network the badge is on:
+  its own setup network as before, and - once connected - its address on your Wi-Fi, plus mDNS
+  `http://badge-<name>.local` (`thanksdanny.local` before a name is chosen). The DHCP hostname is the same,
+  so routers list it as `badge-danny` etc. (`webBegin()` / `webHostname()` in `Badge.ino`.)
+- Settings -> Setup: on Wi-Fi it just shows those two addresses (no scan, no setup network); without Wi-Fi it
+  raises `ThanksDanny-setup` as before.
+- Safety now that anyone on the same Wi-Fi can open the page: changing the broker host, port or TLS requires
+  typing the password again (otherwise the saved password could be sent to someone else's broker). Passwords
+  are still write-only on the page and never logged. Anyone on the same Wi-Fi can still change the Wi-Fi or the
+  radar location - fine at home; a PIN would be the next step if the badges live on shared networks.
+- The mDNS name follows the badge name chosen in Settings from the next start-up.
+- Build: **2,713,035 bytes** (57%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

@@ -60,6 +60,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ESPmDNS.h>
 #include <Preferences.h>
 #include <math.h>
 #include <time.h>
@@ -506,6 +507,27 @@ void drawMenu() {
 
 void drawAPInfo() {
   gfx->fillScreen(RGB565(10, 14, 20));
+  if (WiFi.status() == WL_CONNECTED && !apRunning) {
+    // On Wi-Fi: the setup page is simply at the badge's address - no setup network needed.
+    String ip = "http://" + WiFi.localIP().toString();
+    String mdns = "http://" + webHostname() + ".local";
+    centred(40, "Setup", 3, RGB565_WHITE);
+    centred(112, "On a phone or PC on", 2, RGB565(150, 220, 255));
+    centred(136, "the same Wi-Fi, open", 2, RGB565(150, 220, 255));
+    centred(182, ip.c_str(), 2, RGB565_WHITE);
+    centred(214, "or", 1, RGB565(160, 160, 175));
+    centred(232, mdns.c_str(), mdns.length() > 28 ? 1 : 2, RGB565_WHITE);
+    centred(282, "Wi-Fi, badge network and radar", 1, RGB565(160, 160, 175));
+    centred(296, "location. Passwords are typed on", 1, RGB565(160, 160, 175));
+    centred(310, "the phone, never shown or logged.", 1, RGB565(160, 160, 175));
+    button(PILL_X, PILL_Y, PILL_W, PILL_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
+    gfx->setTextSize(2);
+    gfx->setTextColor(RGB565_WHITE);
+    gfx->setCursor(PILL_X + 16, PILL_Y + 14);
+    gfx->print("Back");
+    Serial.printf("ui     : setup info (%s, %s)\n", ip.c_str(), mdns.c_str());
+    return;
+  }
   centred(30, "Wi-Fi setup", 3, RGB565_WHITE);
   gfx->setTextSize(2);
   gfx->setTextColor(RGB565(150, 220, 255));
@@ -605,11 +627,36 @@ void scanAndCache() {
   Serial.printf("wifi   : scan found %d network(s)\n", scanCount);
 }
 
+// The badge's name on the network: badge-danny (router lists, and http://badge-danny.local).
+String webHostname() {
+  const char *sosMeId();                       // Sos.ino
+  const char *id = sosMeId();
+  return id[0] ? String("badge-") + id : String("thanksdanny");
+}
+
+// v3.13: the setup page is served on EVERY network the badge is on - its own setup network
+// (192.168.4.1) and, once connected, its address on your Wi-Fi (also http://badge-<name>.local).
+// Routes are registered once; the server listens on all interfaces.
+static bool webStarted = false;
+void webBegin() {
+  if (webStarted) return;
+  server.on("/", handleRoot);
+  server.on("/rescan", handleRescan);
+  server.on("/save", HTTP_POST, handleSave);
+  server.on("/sos", HTTP_POST, []() { void sosHandleSave(); sosHandleSave(); });
+  server.on("/radar", HTTP_POST, []() { radarHandleSave(); });
+  server.onNotFound([]() { server.send(200, "text/html", buildPage()); });
+  server.begin();
+  webStarted = true;
+  Serial.println("web    : setup page served on port 80 (setup network and Wi-Fi)");
+}
+
 void beginConnect() {
   if (!wifiSSID.length()) return;
   prefs.begin("wifi", true);
   String pass = prefs.getString("pass", "");
   prefs.end();
+  WiFi.setHostname(webHostname().c_str());     // before mode/begin, or it is ignored
   WiFi.mode(WIFI_AP_STA);           // keep the setup page reachable if this fails
   WiFi.begin(wifiSSID.c_str(), pass.c_str());
   connecting = true;
@@ -694,16 +741,8 @@ void startSetupAP() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(AP_SSID);                 // open, and only while there is no working network
   apAddress = WiFi.softAPIP().toString();
-  if (!apRunning) {
-    server.on("/", handleRoot);
-    server.on("/rescan", handleRescan);
-    server.on("/save", HTTP_POST, handleSave);
-    server.on("/sos", HTTP_POST, []() { void sosHandleSave(); sosHandleSave(); });
-    server.on("/radar", HTTP_POST, []() { radarHandleSave(); });
-    server.onNotFound([]() { server.send(200, "text/html", buildPage()); });
-    server.begin();
-    apRunning = true;
-  }
+  webBegin();
+  apRunning = true;
   Serial.printf("ap     : '%s' up, setup page at http://%s\n", AP_SSID, apAddress.c_str());
 }
 
@@ -748,6 +787,12 @@ void handleTap(int16_t x, int16_t y) {
         // Use the scan cached at boot. Rescanning here measured 3363 ms on the tap path -
         // the single worst delay in the UI - and the list only changes when networks do.
         // Say something immediately anyway: an acked tap must never look ignored.
+        if (WiFi.status() == WL_CONNECTED) {       // v3.13: just show where the page is
+          Serial.println("         -> menu: setup (on Wi-Fi: show the badge's address)");
+          showScreen(ST_APINFO);
+          lastActMs = millis() - t0;
+          return;
+        }
         if (scanCount == 0) {
           centred(392, "scanning for networks...", 1, RGB565(255, 220, 120));
           gfx->flush();                         // the scan takes seconds: say so first
@@ -933,7 +978,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.12 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.13 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1003,6 +1048,7 @@ void setup() {
   }
 
   // v3.10: no start-up picture or sound any more - straight to the home screen.
+  webBegin();                                  // v3.13: the setup page, on every network
   showScreen(ST_HOME);
   saverPoke();                                 // the idle clock starts at the home screen
   Serial.printf("touch  : polled every %d ms, tap guard %d ms\n", POLL_MS, TAP_GUARD_MS);
@@ -1037,6 +1083,12 @@ void loop() {
       // that simply never happens. Ask for the correct time once per boot.
       // v3.2: with the Amsterdam time zone, so the screensaver clock shows local time (summer
       // time included). TLS only looks at the absolute time, which the zone does not change.
+      MDNS.end();                                   // a reconnect re-registers the name cleanly
+      if (MDNS.begin(webHostname().c_str())) {      // v3.13: http://badge-<name>.local
+        MDNS.addService("http", "tcp", 80);
+        Serial.printf("web    : setup page at http://%s and http://%s.local\n",
+                      WiFi.localIP().toString().c_str(), webHostname().c_str());
+      }
       configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");
       Serial.println("time   : asked SNTP for the correct time (Europe/Amsterdam)");
       Serial.println("ap     : tearing down the setup network");

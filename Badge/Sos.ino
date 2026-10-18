@@ -507,6 +507,7 @@ bool sosSlapWaiting() { return sosDrain(); }
 // ---------------------------------------------------------------- settings rows + setup page
 
 // Settings rows (drawn by Badge.ino's drawMenu): the badge name and the sound switch.
+const char *sosMeId() { return sosMe >= 0 ? SOS_ID[sosMe] : ""; }   // for the network name
 const char *sosMeLabel() { return sosMe >= 0 ? SOS_NAME[sosMe] : "not chosen"; }
 bool sosIsMuted() { return sosMuted; }
 
@@ -559,6 +560,24 @@ String sosSetupForm() {
 }
 
 void sosHandleSave() {
+  // v3.13: the page is now reachable from anyone on the same Wi-Fi. Pointing the badge at another
+  // broker (or turning TLS off) with the saved password would hand that password to whoever runs
+  // it - so changing where the badge connects requires typing the password again.
+  {
+    String nh = server.arg("host"); nh.trim();
+    bool nt = server.arg("tls") == "1";
+    int np = server.arg("port").toInt();
+    if (np <= 0 || np >= 65536) np = nt ? 8883 : 1883;
+    if ((nh != sosHost || np != sosPort || nt != sosTls) && !server.arg("pw").length() && sosPass.length()) {
+      Serial.println("sos    : broker change refused - the password was not typed again");
+      server.send(200, "text/html",
+        F("<body style='font-family:system-ui;background:#0e0e12;color:#eee;padding:26px'>"
+          "<h2>Type the password again</h2><p>When you change the broker address, port or TLS, the "
+          "badge needs its password typed again - so nobody can send your saved password to "
+          "another server.</p><p><a style='color:#8cf' href='/'>Back</a></p></body>"));
+      return;
+    }
+  }
   int me = sosIndex(server.arg("me").c_str());
   sosMe = me;
   sosHost = server.arg("host"); sosHost.trim();
