@@ -643,6 +643,21 @@ leaves the fetched area it says "out of range - last seen Ns ago". Any tap = bac
 - The aircraft lists (3 x 96 entries, ~130 bytes each now) moved to PSRAM.
 - Build: **2,730,751 bytes** (57%).
 
+## v3.16 - snappier carousel swipe
+
+The slide redrew and sent a 211-row band (rows 214-424) five times per swipe, each time copied into a temp
+buffer first, and only started after 45 px of finger travel. Now:
+
+- **Starts sooner**: a swipe is recognised after 30 px (`SWIPE_PX`, was 45).
+- **Less per frame**: frames redraw and send only the icon strip (rows 224-355, `ICONS_Y0/1`); the dots and the
+  name pill (`drawCarouselInfo()`) are redrawn only on the frame where the app in the middle changes.
+- **No copy**: `flushRect()` sends full-width bands straight from the framebuffer (they are contiguous), instead
+  of copying them into `flushTmp` first. Helps every full-width partial update, not only the carousel.
+- **4 frames** instead of 5 (ease-out: 44% / 75% / 94% / 100%).
+- Expected: roughly 2-3x faster per swipe; the serial log's `ui     : carousel -> NAME (N ms)` line shows the
+  real number.
+- Build: **2,730,991 bytes** (57%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

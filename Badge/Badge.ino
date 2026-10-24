@@ -139,9 +139,11 @@ static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "
 #define HPILL_Y     372
 #define HPILL_W     230
 #define HPILL_H     46
-#define SWIPE_PX    45                   // horizontal travel that makes a press a swipe
+#define SWIPE_PX    30                   // horizontal travel that makes a press a swipe (v3.16: was 45)
 #define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
-#define SWIPE_FRAMES 5                   // carousel slide, ~60 ms per frame
+#define SWIPE_FRAMES 4                   // carousel slide frames (v3.16: was 5, now ~20 ms each)
+#define ICONS_Y0    224                  // rows the sliding icons can touch (slot circles + focus ring)
+#define ICONS_Y1    355
 #define CAROUSEL_Y0 214                  // rows the carousel can touch: restored from the
 #define CAROUSEL_Y1 424                  //   wallpaper each animation frame
 
@@ -206,6 +208,12 @@ void flushRect(int x, int y, int w, int h) {
   if (y & 1) { y--; h++; }
   if (w & 1) w++;                       // 466 is even, so x even + w odd never reaches the edge
   if (h & 1) h++;
+  // v3.16: a full-width band is already contiguous in the framebuffer - send it as it is,
+  // without copying it into flushTmp first (the carousel slide is all full-width bands).
+  if (x == 0 && w == LCD_WIDTH) {
+    panel->draw16bitRGBBitmap(0, y, gfx->getFramebuffer() + (size_t)y * LCD_WIDTH, w, h);
+    return;
+  }
   if ((long)w * h > FLUSH_TMP_PX) { gfx->flush(); return; }
   if (!flushTmp) flushTmp = (uint16_t *)ps_malloc((size_t)FLUSH_TMP_PX * 2);
   if (!flushTmp) { gfx->flush(); return; }
@@ -359,7 +367,9 @@ void slotAt(float f, int *x, int *y, int *r) {
 
 // The carousel at offset `p` (0 = settled; 0..1 sliding to the next app, 0..-1 to the previous),
 // plus the dots and the pill. Draws into the canvas only.
-void drawCarousel(float p) {
+// v3.16: split in two so a slide frame only redraws (and sends) the icon strip; the dots and
+// the name pill are redrawn only on the frame where the app in the middle changes.
+void drawCarouselIcons(float p) {
   // Far ones first, so the middle icon is drawn on top of anything it overlaps.
   const int order[5] = { -2, 2, -1, 1, 0 };
   for (int n = 0; n < 5; n++) {
@@ -370,6 +380,11 @@ void drawCarousel(float p) {
     bool focus = fabsf(k - p) < 0.5f;
     drawAppIcon(app, x, y, r, focus);
   }
+}
+
+int carouselShown(float p) { return ((homeApp + (int)roundf(p)) % APP_COUNT + APP_COUNT) % APP_COUNT; }
+
+void drawCarouselInfo(float p) {
   // Page dots: which of the apps is in the middle.
   int shown = ((homeApp + (int)roundf(p)) % APP_COUNT + APP_COUNT) % APP_COUNT;
   for (int i = 0; i < APP_COUNT; i++) {
@@ -393,6 +408,11 @@ void drawCarousel(float p) {
   uiCentred(HPILL_Y + 29, net, &UiSmall, nc);
 }
 
+void drawCarousel(float p) {
+  drawCarouselIcons(p);
+  drawCarouselInfo(p);
+}
+
 void drawHome() {
   // The decoded wallpaper is cached in PSRAM and copied into the canvas (a memcpy, a few ms).
   // The cache, and the fallback if it fails, both live inside wallpaperBlit() (Gallery.ino).
@@ -408,13 +428,23 @@ void drawHome() {
 void homeSlide(int dir) {
   void wallpaperRows(int y0, int y1);            // Gallery.ino
   uint32_t t0 = millis();
+  int shownBefore = homeApp;
   for (int f = 1; f <= SWIPE_FRAMES; f++) {
     float t = (float)f / SWIPE_FRAMES;
     float e = 1.0f - (1.0f - t) * (1.0f - t);     // ease out: quick start, gentle stop
-    wallpaperRows(CAROUSEL_Y0, CAROUSEL_Y1);
-    if (f < SWIPE_FRAMES) drawCarousel(dir * e);
-    else { homeApp = ((homeApp + dir) % APP_COUNT + APP_COUNT) % APP_COUNT; drawCarousel(0); }
-    flushRect(0, CAROUSEL_Y0, LCD_WIDTH, CAROUSEL_Y1 - CAROUSEL_Y0 + 1);   // the band only
+    float p = dir * e;
+    if (f == SWIPE_FRAMES) { homeApp = ((homeApp + dir) % APP_COUNT + APP_COUNT) % APP_COUNT; p = 0; }
+    wallpaperRows(ICONS_Y0, ICONS_Y1);
+    drawCarouselIcons(p);
+    int shown = carouselShown(p);
+    if (shown != shownBefore) {                    // the middle app changed: dots + name too
+      shownBefore = shown;
+      wallpaperRows(ICONS_Y1 + 1, CAROUSEL_Y1);
+      drawCarouselInfo(p);
+      flushRect(0, ICONS_Y0, LCD_WIDTH, CAROUSEL_Y1 - ICONS_Y0 + 1);
+    } else {
+      flushRect(0, ICONS_Y0, LCD_WIDTH, ICONS_Y1 - ICONS_Y0 + 1);   // just the icon strip
+    }
   }
   Serial.printf("ui     : carousel -> %s (%lu ms)\n", APP_NAME[homeApp], (unsigned long)(millis() - t0));
 }
@@ -986,7 +1016,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.15 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.16 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
