@@ -119,7 +119,8 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 // ------------------------------------------------------- home: the app carousel (v2.3)
 // One big icon in the middle, its neighbours smaller at the sides so it is obvious there is more
 // to swipe to, the app's name and the Wi-Fi state in a pill underneath, and page dots. Swipe left
-// / right to move through the apps; tap the big icon to open it, tap a side icon to move to it.
+// / right to move through the apps; DOUBLE-tap the big icon to open it (v3.20), tap a side icon to
+// move to it.
 // Slot geometry, from far left (-2, off the glass) to far right (+2). The centre icon (R 60) sits
 // under the Sons of Sudo sign (its text ends at y~235, measured by tools/measure_wallpaper.py).
 // Every visible slot is checked against the round mask at boot.
@@ -143,6 +144,12 @@ static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "
 #define SWIPE_PX    30                   // horizontal travel that makes a press a swipe (v3.16: was 45)
 #define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
 #define SWIPE_FRAMES 4                   // carousel slide frames (v3.16: was 5, now ~20 ms each)
+#define DBL_TAP_MS  450                  // v3.20: the second tap must land this soon after the first
+static uint32_t homeArmedAt = 0;         // v3.20: when the centre icon got its first tap (0 = not armed)
+static bool homeOnCentre(int x, int y) {
+  int cx = x - SLOT_X[2], cy = y - SLOT_Y[2];
+  return cx * cx + cy * cy <= (SLOT_R[2] + 18) * (SLOT_R[2] + 18);
+}
 #define ICONS_Y0    200                  // rows the sliding icons can touch (slot circles + focus ring)
 #define ICONS_Y1    355
 #define CAROUSEL_Y0 200                  // rows the carousel can touch: restored from the
@@ -508,7 +515,7 @@ void homePressClear() {
 // A horizontal swipe. Only the home screen uses it for now.
 void handleSwipe(int dir) {
   Serial.printf("swipe  : %s on screen %d\n", dir > 0 ? "left (next)" : "right (previous)", screen);
-  if (screen == ST_HOME) { homePressed = 0; homeSlide(dir); }   // the slide redraws the band
+  if (screen == ST_HOME) { homePressed = 0; homeArmedAt = 0; homeSlide(dir); }   // the slide redraws the band
 }
 
 void drawMenu() {
@@ -809,10 +816,16 @@ void handleTap(int16_t x, int16_t y) {
 
   if (screen == ST_HOME) {
     // Generous targets: the middle icon opens, a side icon brings that app to the middle.
-    int cx = x - SLOT_X[2], cy = y - SLOT_Y[2];
+    // v3.20: the first tap on the middle icon only arms it (the highlight ring stays on); the
+    // second tap opens it - that one is caught on the press in pollTouch(), not here.
     int lx = x - SLOT_X[1], ly = y - SLOT_Y[1];
     int rx = x - SLOT_X[3], ry = y - SLOT_Y[3];
-    if (cx * cx + cy * cy <= (SLOT_R[2] + 18) * (SLOT_R[2] + 18))      openApp(homeApp);
+    homeArmedAt = 0;                                             // any other tap disarms
+    if (homeOnCentre(x, y)) {
+      homeArmedAt = millis(); if (!homeArmedAt) homeArmedAt = 1;
+      homePressed = 2;                                           // keep the ring; cleared on timeout
+      Serial.println("         -> (home: armed - tap again to open)");
+    }
     else if (lx * lx + ly * ly <= (SLOT_R[1] + 16) * (SLOT_R[1] + 16)) homeSlide(-1);
     else if (rx * rx + ry * ry <= (SLOT_R[3] + 16) * (SLOT_R[3] + 16)) homeSlide(+1);
     else Serial.println("         -> (home: not on an icon - swipe left/right to change app)");
@@ -978,7 +991,14 @@ void pollTouch() {
       tStartX = tLastX = xs[0];
       tStartY = tLastY = ys[0];
       tSwiped = false;
-      if (screen == ST_HOME) {
+      if (screen == ST_HOME && homeArmedAt && now - homeArmedAt <= DBL_TAP_MS && homeOnCentre(tStartX, tStartY)) {
+        tSwiped = true;                      // v3.20: double tap - open on the second press
+        homeArmedAt = 0;
+        homePressed = 0;
+        lastTap = now;
+        Serial.printf("tap    : double tap -> open %s\n", APP_NAME[homeApp]);
+        openApp(homeApp);
+      } else if (screen == ST_HOME) {
         homePressFeedback(tStartX, tStartY);
       } else if (now - lastTap > TAP_GUARD_MS) {
         tSwiped = true;                      // consumed: nothing more happens on the lift
@@ -1022,7 +1042,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.19 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.20 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1155,6 +1175,11 @@ void loop() {
       startSetupAP();
       if (screen == ST_APINFO) showScreen(ST_APINFO);
     }
+  }
+  // v3.20: no second tap in time - take the highlight off the middle icon again.
+  if (homeArmedAt && millis() - homeArmedAt > DBL_TAP_MS && !touchDown) {
+    homeArmedAt = 0;
+    if (screen == ST_HOME) homePressClear(); else homePressed = 0;
   }
   if (screen == ST_RUMOURS && !saverActive()) { void rumoursTick(); rumoursTick(); }   // sound bars
   void sosPoll(); sosPoll();                                          // badge network: slaps, presence

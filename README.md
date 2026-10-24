@@ -702,6 +702,16 @@ buffer first, and only started after 45 px of finger travel. Now:
 - Idle "ASK" screen uses UiBig for "tap or shake / the oracle".
 - Build: **2,747,759 bytes** (58%).
 
+## v3.20 - double tap opens an app
+
+- Home carousel: a single tap on the big middle icon now only **arms** it (the white highlight ring stays on);
+  a second tap within **450 ms** (`DBL_TAP_MS`) opens the app. The second tap is caught on the *press*
+  in `pollTouch()`, so the app opens the moment the finger lands - no waiting for the lift.
+- No second tap in time: `loop()` takes the ring off again (`homePressClear()`). A swipe or a tap anywhere
+  else disarms it. Side icons still move with one tap; every other screen is unchanged.
+- Serial log: `-> (home: armed - tap again to open)` and `tap    : double tap -> open <APP>`.
+- Build: **2,748,007 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
