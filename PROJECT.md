@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.18, 24 Oct 2026)
+# Thanks Danny badge - project index (v3.19, 24 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.18)
+## What the badge does (v3.19)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
@@ -29,7 +29,7 @@ measurements); this page is the map.
   (5 / 10 / 15 / 25 km), HOME or BOOT = home. Your location is typed once on the setup page.
   Based on MatixYo/ESP32-Plane-Radar (MIT).
 - **Oracle** ("Network Socrates"): a magic 8-ball for network engineers. Tap the swirling blue sphere or shake
-  the badge; the answer floats up in its window - 59 sarcastic aphorisms, excuses and Socratic rebukes
+  the badge; the answer floats up in its window - 43 Socratic network aphorisms and decrees, in big text
   ("It is DNS. It has always been DNS."). HOME or BOOT = home.
 - **Settings**: Setup (on Wi-Fi: the setup page is at the badge's address or `http://badge-<name>.local`;
   without Wi-Fi: the badge raises its own `ThanksDanny-setup` network), this badge's name, slap sound
@@ -79,7 +79,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.18 build: 2,743,139 bytes (58% of the app partition), globals 23%
+- v3.19 build: 2,747,759 bytes (58% of the app partition)
 
 ## Restore from scratch (new PC, or a wiped board)
 

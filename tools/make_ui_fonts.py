@@ -8,6 +8,7 @@ replaces (built-in caps are 7 px per scale step):
     UiSmall  replaces size 1 (caps  7 px) -> caps  8 px, v3.17:  9 px
     UiBig    replaces size 2 (caps 14 px) -> caps 15 px, v3.17: 17 px
     UiTitle  replaces size 3 (caps 21 px) -> caps 23 px, v3.17: 26 px
+    UiOracle (v3.19) caps 20 px - the Oracle's answer text
 
 Output: Badge/ui_fonts.h (GFXfont structs, ASCII 0x20-0x7E, 1 bit per pixel).
 DejaVu fonts: Bitstream Vera licence - free to embed and redistribute.
@@ -19,7 +20,8 @@ from PIL import ImageFont
 
 TTF = sys.argv[1] if len(sys.argv) > 1 else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 OUT = Path(__file__).resolve().parent.parent / "Badge" / "ui_fonts.h"
-FONTS = [("UiSmall", 9), ("UiBig", 17), ("UiTitle", 26)]   # v3.17: one step up from 8 / 15 / 23   # name, target cap height (px)
+FONTS = [("UiSmall", 9), ("UiBig", 17), ("UiOracle", 20), ("UiTitle", 26)]   # name, target cap height (px)
+# v3.17: UiSmall/UiBig/UiTitle one step up from 8 / 15 / 23. v3.19: UiOracle for the 8-ball answers.
 
 
 def cap_height(font):

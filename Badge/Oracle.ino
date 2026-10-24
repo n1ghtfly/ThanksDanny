@@ -1,5 +1,5 @@
 /*
- * Oracle (v3.18) - "Network Socrates", a magic 8-ball for network engineers.
+ * Oracle (v3.18, v3.19: bigger text + new quotes) - "Network Socrates", a magic 8-ball for network engineers.
  *
  * Tap the sphere or SHAKE the badge (the QMI8658's accelerometer): the marbled blue sphere spins
  * and swirls, then a dark window opens in the middle and a sarcastic network aphorism / excuse /
@@ -15,75 +15,61 @@
 #define ORA_R        180                  // sphere radius
 #define ORA_CX       233
 #define ORA_CY       236
-#define ORA_WIN      118                  // answer window radius
+#define ORA_WIN      162                  // answer window radius (v3.19: was 118)
+#define ORA_TXT_R    150                  // text stays inside this radius
 #define ORA_SPIN_MS  1600                 // how long it swirls before answering
 #define ORA_SHADES   10
 #define ORA_HOME_Y   432
 
 static const char *ORA_SAYS[] = {
-  // the three that started it
-  "Did you ping before you thought?",
-  "It is DNS. It has always been DNS.",
+  // Epistemology & pure Socratic scorn
+  "I know only one thing: that you forgot 'commit confirmed'.",
+  "Did you ping before you thought, or did you think before you pinged?",
   "The SFP is seated only in your mind.",
-  // Socratic rebukes
-  "What is a packet, if not a question nobody answered?",
-  "You say it worked yesterday. Define yesterday.",
-  "Know thyself. Then know thy default gateway.",
-  "The unexamined config is not worth committing.",
-  "I know that I know nothing. You know less: you did not check the logs.",
-  "Is the link down, or is your understanding down?",
-  "Who among us has truly read the release notes?",
-  "If a switch reboots in an empty datacenter, does the NOC get paged?",
-  "Have you considered that the cable is merely a metaphor?",
-  "You ask why it fails. I ask why you expected otherwise.",
-  "To err is human. To propagate it to 400 switches is automation.",
-  "What you call a feature, the vendor calls undefined behaviour.",
-  // the classics
-  "It is always the firewall. Except when it is DNS.",
-  "Have you tried turning off the spanning tree? (Do not.)",
-  "Reply hazy. MTU mismatch likely.",
-  "Ask again after the change window.",
-  "Signs point to a duplex mismatch.",
-  "Outlook not so good. Neither is Exchange.",
-  "Without a doubt: layer 8.",
-  "Concentrate and ask again. Preferably with a pcap.",
-  "My sources say BGP. My sources are flapping.",
-  "Cannot predict now. ARP cache is stale.",
-  "Most likely. But only on the secondary.",
-  "Yes, in production. No, in the lab.",
-  "Better not tell you now. The NDA forbids it.",
-  "Very doubtful. The ticket says 'no change'.",
-  // excuses
-  "Works on my VLAN.",
-  "That port was never documented, therefore it does not exist.",
-  "The vendor calls it a known issue. Known to whom?",
-  "Someone plugged both ends into the same switch. Again.",
-  "The fibre is fine. The cleaner is still in its bag.",
-  "Latency is just the network thinking it over.",
-  "The packet left. Where it went is a matter of faith.",
-  "Have you checked the other end of the cable? There is always another end.",
-  "Packet loss builds character.",
-  "The certificate expired at 03:00 on a Sunday, as tradition demands.",
-  "Someone ran 'debug all' on the core. Pray.",
-  "That subnet overlaps with the VPN of your soul.",
-  "The NTP server lies, and so does everything after it.",
-  "QoS is just deciding whom to disappoint first.",
-  "Yes, the wireless is slow. It is wireless.",
-  "There is no cloud. Only someone else's switch.",
-  "The change was minor. The outage was not.",
-  "Somewhere, a loop. Somewhere, a broadcast storm. Somewhere, you.",
-  "Rollback is also a strategy.",
-  "Your ACL is correct. It is also in the wrong direction.",
-  "Ping works, so the network is fine. Close the ticket.",
-  "Have you tried a smaller MTU and a larger coffee?",
-  "One does not simply reboot the core switch.",
-  "The documentation is the running-config. Good luck.",
-  "Ask the person who left last year. They knew.",
-  "Trust, but traceroute.",
-  "IPv6 will fix it. Next year. Every year.",
-  "It is not a bug, it is an undocumented redundancy.",
-  "All routes lead to 0.0.0.0/0 eventually.",
-  "Danny approved it, therefore it is correct.",
+  "He who trusts an empty '/var/log' has never known inodes.",
+  "To blame the firewall without looking at the route is to fear shadows in a cave.",
+  "An unlogged maintenance window is a life lived in deceit.",
+  "Is the box truly dead, or does your packet merely lack the will to find it?",
+  "Speak not to me of 99.999% uptime; speak to me of your last tested backup.",
+  "The unexamined config is not worth running.",
+  "You stare at Wireshark as a child stares at thunder: full of fear, understanding nothing.",
+  // Hardware, optics & layer 1 truths
+  "Go forth and push the transceiver another three millimeters.",
+  "A clean ferrule brings clarity to the soul; wipe the fiber.",
+  "The rack door was shut with malice. Layer 1 is broken.",
+  "Do not mistake an amber LED for the anger of the gods; your cable is loose.",
+  "He who searches for BGP neighbors on an unseated patch lead seeks fish in a tree.",
+  "The PDU hath given, and the cleaning crew hath unplugged.",
+  "Thy serial cable resteth in 'AUX 0'. The CLI shall remain silent.",
+  "An SFP shines in the dark, yet no one is there to receive its light.",
+  // Routing, protocols & illusions
+  "It is DNS. It has always been DNS. It shall forever be DNS.",
+  "Your default gateway knoweth you not.",
+  "Greed for jumbo frames hath brought down a plague of path MTU drops.",
+  "A '/16' upon five office hosts is not benevolence, but madness.",
+  "Why seekest thou the route target in an empty VRF?",
+  "The Spanning Tree emperor hath fallen to a five-euro desktop switch.",
+  "The carrier whispered 'zero-impact maintenance', and the BGP session wept.",
+  "Thou hast redistributed the lab into the core. Repent.",
+  "The loopback exists, yet it rejects your existence.",
+  // Operating systems & the daemons
+  "SELinux woke up, observed your daemon, and chose violence.",
+  "'systemd' giveth life, and 'systemd' taketh away without remorse.",
+  "Seek the ghost of 'dnf.pid', for it still walketh among the living.",
+  "The OOM killer smelled your telemetry script from three subnets away.",
+  "NetworkManager hath seen your static routes, and hath cast them into the sea.",
+  "A reboot will heal the device, but reveal the config you failed to save.",
+  // Direct oracular decrees
+  "SIGNS POINT TO DNS.",
+  "LAYER 1 LAUGHS AT THEE.",
+  "SEEK CONSOLE. DESPAIR.",
+  "NO ROUTE TO HOST.",
+  "CHECK THINE ARP TABLE.",
+  "THE CARRIER LIED.",
+  "SELINUX SAYS NO.",
+  "COMMIT WAS NOT SAVED.",
+  "THE BUFFER OVERFLOWETH.",
+  "INODES EXHAUSTED.",
 };
 #define ORA_N (int)(sizeof(ORA_SAYS) / sizeof(ORA_SAYS[0]))
 
@@ -171,41 +157,51 @@ static void oraHomePill() {
   centred(ORA_HOME_Y + 6, "HOME", 2, RGB565(220, 220, 230));
 }
 
-// Word-wrap s into lines no wider than maxW in font f. Returns the line count (max 6);
-// oraWrapTooWide is set when a single word is wider than maxW on its own.
-static bool oraWrapTooWide = false;
-static int oraWrap(const char *s, const GFXfont *f, int maxW, char lines[][64]) {
-  int n = 0;
-  char cur[64] = "";
-  const char *p = s;
-  oraWrapTooWide = false;
+// Word-wrap s into at most maxN lines of font f (line pitch lh, capital height cap), where each
+// line may only be as wide as the circle (radius ORA_TXT_R) is at that height. Tries 1, 2, ...
+// lines until the text fits. Returns the line count, or 0 if it does not fit in this font.
+static int oraWrap(const char *s, const GFXfont *f, int cap, int lh, int maxN, char lines[][64]) {
   gfx->setFont(f);
   gfx->setTextSize(1);
-  while (*p && n < 6) {
-    while (*p == ' ') p++;
-    const char *e = p;
-    while (*e && *e != ' ') e++;
-    char word[48];
-    int wl = (int)(e - p) < 47 ? (int)(e - p) : 47;
-    memcpy(word, p, wl); word[wl] = 0;
-    char test[64];
-    snprintf(test, sizeof(test), cur[0] ? "%s %s" : "%s%s", cur, word);
-    int16_t x1, y1; uint16_t w, h;
-    gfx->getTextBounds(test, 0, 0, &x1, &y1, &w, &h);
-    if ((int)w > maxW && cur[0]) {
-      snprintf(lines[n++], 64, "%s", cur); snprintf(cur, sizeof(cur), "%s", word);
-      gfx->getTextBounds(cur, 0, 0, &x1, &y1, &w, &h);
-      if ((int)w > maxW) oraWrapTooWide = true;
-    } else if ((int)w > maxW) oraWrapTooWide = true;
-    else snprintf(cur, sizeof(cur), "%s", test);
-    p = e;
+  for (int n = 1; n <= maxN; n++) {
+    int top = -(n * lh) / 2 + (lh - cap) / 2;                    // cap top of line 0, relative to centre
+    int li = 0;
+    bool ok = true;
+    char cur[64] = "";
+    const char *p = s;
+    while (*p && ok) {
+      while (*p == ' ') p++;
+      if (!*p) break;
+      const char *e = p;
+      while (*e && *e != ' ') e++;
+      char word[48];
+      int wl = (int)(e - p) < 47 ? (int)(e - p) : 47;
+      memcpy(word, p, wl); word[wl] = 0;
+      p = e;
+      for (;;) {
+        int y0 = top + li * lh, y1 = y0 + cap + 5;                // +5: descenders
+        int dy = abs(y0) > abs(y1) ? abs(y0) : abs(y1);
+        int maxW = dy < ORA_TXT_R ? (int)(2 * sqrtf((float)(ORA_TXT_R * ORA_TXT_R - dy * dy))) - 8 : 0;
+        char test[64];
+        snprintf(test, sizeof(test), cur[0] ? "%s %s" : "%s%s", cur, word);
+        int16_t x1, yy; uint16_t w, h;
+        gfx->getTextBounds(test, 0, 0, &x1, &yy, &w, &h);
+        if ((int)w <= maxW) { snprintf(cur, sizeof(cur), "%s", test); break; }
+        if (!cur[0]) { ok = false; break; }                       // one word wider than the line
+        snprintf(lines[li++], 64, "%s", cur); cur[0] = 0;
+        if (li >= n) { ok = false; break; }
+      }
+    }
+    if (ok && cur[0]) snprintf(lines[li++], 64, "%s", cur);
+    if (ok && li <= n) { gfx->setFont(); return li; }
   }
-  if (cur[0] && n < 6) snprintf(lines[n++], 64, "%s", cur);
   gfx->setFont();
-  return n;
+  return 0;
 }
 
 // The answer window: a dark disc with a thin rim, the text centred in it, faded by level (0..4).
+// v3.19: the window fills most of the sphere; the biggest font that fits wins (title 26 px caps
+// for the short decrees, 20 px for most quotes, 17 px as the last resort - no more tiny text).
 static void oraWindow(const char *text, int level, bool ask) {
   gfx->fillCircle(ORA_CX, ORA_CY, ORA_WIN, RGB565(3, 6, 26));
   gfx->drawCircle(ORA_CX, ORA_CY, ORA_WIN, RGB565(40, 80, 150));
@@ -213,17 +209,21 @@ static void oraWindow(const char *text, int level, bool ask) {
   int k = 40 + level * 53;                                       // fade: dim blue -> bright
   uint16_t c = RGB565(k * 7 / 10, k * 9 / 10, k);
   if (ask) {
-    uiCentred(ORA_CY - 34, "ASK", &UiTitle, c);
-    uiCentred(ORA_CY + 8, "tap or shake", &UiSmall, RGB565(110, 140, 190));
-    uiCentred(ORA_CY + 26, "the oracle", &UiSmall, RGB565(110, 140, 190));
+    uiCentred(ORA_CY - 44, "ASK", &UiTitle, c);
+    uiCentred(ORA_CY + 6, "tap or shake", &UiBig, RGB565(110, 140, 190));
+    uiCentred(ORA_CY + 36, "the oracle", &UiBig, RGB565(110, 140, 190));
     return;
   }
-  char lines[6][64];
-  const GFXfont *f = &UiBig;
-  int n = oraWrap(text, f, 2 * ORA_WIN - 50, lines), lh = 26;
-  if (n > 4 || oraWrapTooWide) { f = &UiSmall; n = oraWrap(text, f, 2 * ORA_WIN - 40, lines); lh = 17; }
-  int top = ORA_CY - (n * lh) / 2 + (level < 4 ? (4 - level) * 4 : 0);   // floats up as it fades in
-  for (int i = 0; i < n; i++) uiCentred(top + i * lh, lines[i], f, c);
+  static const GFXfont *FONT[] = { &UiTitle, &UiOracle, &UiBig };
+  static const int CAP[] = { UITITLE_CAP, UIORACLE_CAP, UIBIG_CAP };
+  static const int LH[]  = { 38, 31, 27 };
+  static const int MAXN[] = { 4, 6, 7 };
+  char lines[7][64];
+  int n = 0, fi = 0;
+  for (fi = 0; fi < 3; fi++) if ((n = oraWrap(text, FONT[fi], CAP[fi], LH[fi], MAXN[fi], lines)) > 0) break;
+  if (n == 0) { fi = 2; n = 1; snprintf(lines[0], 64, "%.20s", text); }   // never happens with ORA_SAYS
+  int top = ORA_CY - (n * LH[fi]) / 2 + (LH[fi] - CAP[fi]) / 2 + (level < 4 ? (4 - level) * 4 : 0);   // floats up
+  for (int i = 0; i < n; i++) uiCentred(top + i * LH[fi], lines[i], FONT[fi], c);
 }
 
 static void oraFrame(int spin, int twist, const char *text, int level, bool ask, bool window) {
