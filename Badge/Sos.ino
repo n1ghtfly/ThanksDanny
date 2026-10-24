@@ -177,6 +177,14 @@ float sosTurnRate() {
   return sqrtf(g.dps.x * g.dps.x + g.dps.y * g.dps.y + g.dps.z * g.dps.z);
 }
 
+// For the Oracle (v3.18): total acceleration in g - about 1.0 at rest - or 0 without a new sample.
+float sosAccelG() {
+  if (!imuOK) return 0;
+  AccelerometerData a;
+  if (!imu.readAccel(a)) return 0;
+  return sqrtf(a.mps2.x * a.mps2.x + a.mps2.y * a.mps2.y + a.mps2.z * a.mps2.z) / 9.80665f;
+}
+
 // ---------------------------------------------------------------- sound
 
 static volatile bool sosSndBusy = false;
@@ -197,6 +205,8 @@ void sosSoundTask(void *arg) {
   sosSndBusy = false;
   vTaskDelete(nullptr);
 }
+
+void sosSwish(int gain) { sosPlay(SND_SWISH, SND_SWISH_LEN, gain); }   // for other apps (Oracle)
 
 void sosPlay(const int16_t *pcm, int len, int gain) {
   if (sosMuted || sosSndBusy || !decAudioInit()) return;

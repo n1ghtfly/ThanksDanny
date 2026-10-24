@@ -669,6 +669,24 @@ buffer first, and only started after 45 px of finger travel. Now:
   rows (longest subtitle 299 of 322 px).
 - Build: **2,733,279 bytes** (57%).
 
+## v3.18 - ORACLE app ("Network Socrates" 8-ball)
+
+`preview_oracle.png` (swirling / answer / answer). A seventh carousel app, between Radar and Settings.
+
+- **Ask**: tap the sphere, or shake the badge - the QMI8658 accelerometer (`sosAccelG()` in `Sos.ino`), over
+  1.9 g or under 0.25 g, with a 1.2 s cooldown. A whoosh plays (`sosSwish()`, respects Slap sound OFF).
+- **Animation** (~2 s, BOOT still works): the window closes, the marbled sphere spins fast and swirls (each
+  texture row twisted by a different amount), slows down, the window opens from a dot and the answer floats up
+  while it brightens. Never the same answer twice in a row.
+- **Sphere**: no per-frame maths. On first open (~0.5 s) a 256x256 marble texture is generated in 10 shades
+  (8 Lambert levels + 2 highlight levels, 1.3 MB PSRAM) and a table maps each of the disc's ~102k pixels to
+  (u, v, shade) of a sphere lit from the upper left. A frame = one table walk + a 362-row full-width flush.
+- **Answers**: 59 in `ORA_SAYS[]` - the three from the brief plus Socratic rebukes, classic-8-ball parodies and
+  excuses. Wrapped to the round window in UiBig, or UiSmall when an answer needs more than 4 lines or has a
+  word too wide for the window (checked for all 59).
+- Screensaver may start on the Oracle screen. Icon: an 8-ball.
+- Build: **2,743,139 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

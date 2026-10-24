@@ -126,14 +126,15 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 static const int SLOT_X[5] = { -40, 104, 233, 362, 506 };
 static const int SLOT_Y[5] = { 310, 296, 284, 296, 310 };   // v3.17: bigger icons, moved up to make room
 static const int SLOT_R[5] = {  24,  42,  70,  42,  24 };   //        (were 20 / 36 / 60)
-#define APP_COUNT   6
+#define APP_COUNT   7
 #define APP_PICTURES 0
 #define APP_DECIDER  1
 #define APP_RUMOURS  2
 #define APP_SLAP     3
 #define APP_RADAR    4                   // v3.12
-#define APP_SETTINGS 5
-static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "SETTINGS" };
+#define APP_ORACLE   5                   // v3.18
+#define APP_SETTINGS 6
+static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "SETTINGS" };
 #define DOTS_Y      362                  // page dots, between the icon and the pill
 #define HPILL_X     118                  // home pill: app name + Wi-Fi line
 #define HPILL_Y     374
@@ -186,6 +187,7 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_SLAPPED      9               // Sos.ino: you just got slapped
 #define ST_VOTE        10               // Vote.ino: a question from the poll website (v3.9)
 #define ST_RADAR       11               // Radar.ino: live aircraft around you (v3.12)
+#define ST_ORACLE      12               // Oracle.ino: the network 8-ball (v3.18)
 static int homeApp = APP_PICTURES;      // which app is in the middle of the carousel
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -349,6 +351,7 @@ void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
     case APP_RUMOURS:  drawRumoursIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
     case APP_SLAP:     drawSlapIcon(cx, cy, (R * 70) / 100, fg, RGB565(12, 12, 18));    break;
     case APP_RADAR:    drawRadarIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));   break;
+    case APP_ORACLE:   drawOracleIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));  break;
     case APP_SETTINGS: drawCog(cx, cy, (R * 52) / 100, fg, RGB565(12, 12, 18));        break;
   }
 }
@@ -463,6 +466,7 @@ void openApp(int app) {
     case APP_RUMOURS:  showScreen(ST_RUMOURS); break;
     case APP_SLAP:     { extern int slapState; slapState = 0; showScreen(ST_SLAP); } break;
     case APP_RADAR:    showScreen(ST_RADAR);   break;
+    case APP_ORACLE:   showScreen(ST_ORACLE);  break;
     case APP_SETTINGS: showScreen(ST_MENU);    break;
   }
 }
@@ -620,6 +624,7 @@ void showScreen(int s) {
     case ST_SLAPPED:      showSlapped();      return;  // Sos.ino; the incoming-slap takeover
     case ST_VOTE:         voteArrive(); showVote(); return;  // Vote.ino; a question to answer
     case ST_RADAR:        showRadar();        return;  // Radar.ino; redrawn by radarTick()
+    case ST_ORACLE:       showOracle();       return;  // Oracle.ino
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -874,6 +879,7 @@ void handleTap(int16_t x, int16_t y) {
   if (screen == ST_SLAPPED) { void slappedTap(int x, int y); slappedTap(x, y); lastActMs = millis() - t0; return; }
   if (screen == ST_VOTE)    { voteTap(x, y);    lastActMs = millis() - t0; return; }
   if (screen == ST_RADAR)   { radarTap(x, y);   lastActMs = millis() - t0; return; }
+  if (screen == ST_ORACLE)  { oracleTap(x, y);  lastActMs = millis() - t0; return; }
 
   if (screen == ST_RUMOURS) {
     void rumoursTap(int x, int y);            // Rumours.ino
@@ -1016,7 +1022,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.17 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.18 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1154,6 +1160,7 @@ void loop() {
   void sosPoll(); sosPoll();                                          // badge network: slaps, presence
   if (screen == ST_SLAP && !saverActive()) { void sosTick(); sosTick(); }   // swing detection
   if (screen == ST_RADAR && !saverActive()) radarTick();             // aircraft glide, fresh data
+  if (screen == ST_ORACLE && !saverActive()) oracleTick();           // a shake asks the oracle
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
   // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
   // printed just before it in the log show what was running.

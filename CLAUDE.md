@@ -23,8 +23,8 @@ Private details (broker host, LAN IPs, what is set up where) are in `NOTES_local
 
 ## Code layout and rules
 
-- `Badge/*.ino` are concatenated alphabetically after `Badge.ino` (Decider, Gallery, Nope, Radar,
-  Rumours, Screensaver, Sos, Vote). A file can use *functions* from later files (Arduino auto-prototypes them)
+- `Badge/*.ino` are concatenated alphabetically after `Badge.ino` (Decider, Gallery, Nope, Oracle,
+  Radar, Rumours, Screensaver, Sos, Vote). A file can use *functions* from later files (Arduino auto-prototypes them)
   but not *variables/macros* from later files. Keep function signatures to primitive types.
 - Screens are `ST_*` in `Badge.ino`; `showScreen()` draws, `handleTap()` routes taps.
   Everything draws into a PSRAM canvas; use `flushRect()` for partial updates (even coordinates).
