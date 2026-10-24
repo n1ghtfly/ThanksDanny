@@ -5,9 +5,9 @@ The built-in 6x8 font only scales in whole steps (x1, x2, x3), so "10% bigger" n
 typeface. Each font here is sized so its CAPITAL height is 10% above the built-in text it
 replaces (built-in caps are 7 px per scale step):
 
-    UiSmall  replaces size 1 (caps  7 px) -> caps  8 px
-    UiBig    replaces size 2 (caps 14 px) -> caps 15 px
-    UiTitle  replaces size 3 (caps 21 px) -> caps 23 px
+    UiSmall  replaces size 1 (caps  7 px) -> caps  8 px, v3.17:  9 px
+    UiBig    replaces size 2 (caps 14 px) -> caps 15 px, v3.17: 17 px
+    UiTitle  replaces size 3 (caps 21 px) -> caps 23 px, v3.17: 26 px
 
 Output: Badge/ui_fonts.h (GFXfont structs, ASCII 0x20-0x7E, 1 bit per pixel).
 DejaVu fonts: Bitstream Vera licence - free to embed and redistribute.
@@ -19,7 +19,7 @@ from PIL import ImageFont
 
 TTF = sys.argv[1] if len(sys.argv) > 1 else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 OUT = Path(__file__).resolve().parent.parent / "Badge" / "ui_fonts.h"
-FONTS = [("UiSmall", 8), ("UiBig", 15), ("UiTitle", 23)]   # name, target cap height (px)
+FONTS = [("UiSmall", 9), ("UiBig", 17), ("UiTitle", 26)]   # v3.17: one step up from 8 / 15 / 23   # name, target cap height (px)
 
 
 def cap_height(font):

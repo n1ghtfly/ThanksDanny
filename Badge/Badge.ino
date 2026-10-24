@@ -124,8 +124,8 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 // under the Sons of Sudo sign (its text ends at y~235, measured by tools/measure_wallpaper.py).
 // Every visible slot is checked against the round mask at boot.
 static const int SLOT_X[5] = { -40, 104, 233, 362, 506 };
-static const int SLOT_Y[5] = { 318, 302, 290, 302, 318 };
-static const int SLOT_R[5] = {  20,  36,  60,  36,  20 };
+static const int SLOT_Y[5] = { 310, 296, 284, 296, 310 };   // v3.17: bigger icons, moved up to make room
+static const int SLOT_R[5] = {  24,  42,  70,  42,  24 };   //        (were 20 / 36 / 60)
 #define APP_COUNT   6
 #define APP_PICTURES 0
 #define APP_DECIDER  1
@@ -134,17 +134,17 @@ static const int SLOT_R[5] = {  20,  36,  60,  36,  20 };
 #define APP_RADAR    4                   // v3.12
 #define APP_SETTINGS 5
 static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "SETTINGS" };
-#define DOTS_Y      360                  // page dots, between the icon and the pill
+#define DOTS_Y      362                  // page dots, between the icon and the pill
 #define HPILL_X     118                  // home pill: app name + Wi-Fi line
-#define HPILL_Y     372
+#define HPILL_Y     374
 #define HPILL_W     230
 #define HPILL_H     46
 #define SWIPE_PX    30                   // horizontal travel that makes a press a swipe (v3.16: was 45)
 #define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
 #define SWIPE_FRAMES 4                   // carousel slide frames (v3.16: was 5, now ~20 ms each)
-#define ICONS_Y0    224                  // rows the sliding icons can touch (slot circles + focus ring)
+#define ICONS_Y0    200                  // rows the sliding icons can touch (slot circles + focus ring)
 #define ICONS_Y1    355
-#define CAROUSEL_Y0 214                  // rows the carousel can touch: restored from the
+#define CAROUSEL_Y0 200                  // rows the carousel can touch: restored from the
 #define CAROUSEL_Y1 424                  //   wallpaper each animation frame
 
 // Bottom pill - the home status line and the "Back" buttons share it. Enlarged from 240x44 to
@@ -1016,7 +1016,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.16 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.17 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

@@ -658,6 +658,17 @@ buffer first, and only started after 45 px of finger travel. Now:
   real number.
 - Build: **2,730,991 bytes** (57%).
 
+## v3.17 - bigger app icons and UI text
+
+`preview_home_bigger.png`.
+- **Icons**: carousel slot radii 20 / 36 / 60 -> 24 / 42 / 70 (middle +17%, sides +17%); slots moved up
+  (`SLOT_Y` 310 / 296 / 284) so the dots (y 362) and the name pill (y 374) still fit below, and the middle icon
+  stays clear of the wallpaper's "SUDO". Slide strip `ICONS_Y0` 200 (covers the press ring), `CAROUSEL_Y0` 200.
+- **UI fonts** one step up (`tools/make_ui_fonts.py`): caps UiSmall 8 -> 9 px, UiBig 15 -> 17 px,
+  UiTitle 23 -> 26 px - home pill, Settings and the radar detail screen. All Settings lines still fit their
+  rows (longest subtitle 299 of 322 px).
+- Build: **2,733,279 bytes** (57%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
