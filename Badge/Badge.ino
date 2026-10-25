@@ -1040,9 +1040,14 @@ void pollTouch() {
 
 void setup() {
   Serial.begin(115200);
+  // v3.22: never wait for the PC. With the badge on USB but no serial monitor open, nobody reads
+  // the port; the core's USB-CDC driver then blocks each print for up to 20 x tx-timeout (100 ms by
+  // default) = 2 s before giving up. Two log lines per swipe = the carousel froze for seconds after
+  // the first swipe. With 0 a line that does not fit is simply dropped.
+  Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.21 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.22 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

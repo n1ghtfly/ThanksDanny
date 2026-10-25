@@ -725,6 +725,21 @@ buffer first, and only started after 45 px of finger travel. Now:
   The detail screen still redraws once a second.
 - Build: **2,749,067 bytes** (58%).
 
+## v3.22 - carousel freeze after the first swipe (serial logging blocked)
+
+Symptom: the first swipe works, then the carousel ignores swipes for several seconds.
+
+Cause: `Serial` is the ESP32-S3's built-in USB-CDC (HWCDC). When the badge is plugged into a PC but **no
+serial monitor has the port open**, nothing reads the data; once the 256-byte TX ring is full, every
+`Serial.print` waits in `HWCDC::write()` for up to 20 x `tx_timeout_ms` (default 100 ms) = **2 s** before
+giving up ("host backpressure" path in core 3.3's HWCDC.cpp). A swipe logs two lines (`swipe :`,
+`ui : carousel ->`), so `loop()` - and with it touch polling - stood still for ~4 s. With the monitor open
+(as after `flash_badge.cmd`) it never happened, which is why it looked random.
+
+Fix: `Serial.setTxTimeoutMs(0)` right after `Serial.begin()`. A log line that does not fit is dropped
+instead of waited for. Logging with the monitor open is unchanged.
+- Build: **2,749,087 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
