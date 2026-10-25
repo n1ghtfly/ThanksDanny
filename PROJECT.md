@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.20, 24 Oct 2026)
+# Thanks Danny badge - project index (v3.21, 25 Oct 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.20)
+## What the badge does (v3.21)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
@@ -23,7 +23,7 @@ measurements); this page is the map.
 - **Ask the Council** (poll website, `web/poll.html` -> GitHub Pages `poll/`): ask a question with 2-4
   answers; every badge pops it up ("CLAUDIO ASKS:") with answer buttons, then shows live results. Votes
   can also be cast on the website. Needs Mosquitto's WebSocket listener (`server/mosquitto/README.md` section 9).
-- **Radar**: live aircraft around you from adsb.fi on a sonar-style grid - heading triangles, speed
+- **Radar**: live aircraft around you from adsb.fi on a sonar-style grid with a rotating sweep beam - heading triangles, speed
   vectors, callsign / altitude / type, planes gliding between updates (every 5 s). Tap a plane for
   details (route, airline, aircraft, altitude, climb, speed, distance, squawk); tap elsewhere = range
   (5 / 10 / 15 / 25 km), HOME or BOOT = home. Your location is typed once on the setup page.
@@ -79,7 +79,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.20 build: 2,748,007 bytes (58% of the app partition)
+- v3.21 build: 2,749,067 bytes (58% of the app partition)
 
 ## Restore from scratch (new PC, or a wiped board)
 

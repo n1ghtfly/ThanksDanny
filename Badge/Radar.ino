@@ -21,6 +21,11 @@
  * badge (NVS "radar") - never in the code, the repository is public. "52.37, 4.90" as copied from
  * a map app works. A default can also come from sos_local.h (RADAR_DEFAULT_LAT / _LON).
  *
+ * Sweep (v3.21): a green beam turns clockwise once every RADAR_SWEEP_MS with a fading trail behind
+ * it, like a real radar scope. Each aircraft lights up bright when the beam passes over it and
+ * dims until the next turn (labels stay readable). The frame rate went from ~3 to ~25 per second;
+ * the beam angle comes from millis(), so it turns at the same speed even if a frame is slow.
+ *
  * Burn-in: the radar is meant to be left running, so the whole picture shifts by a few pixels
  * every minute (the rings would otherwise stand still on the AMOLED for hours).
  */
@@ -28,7 +33,10 @@
 #include "src/adsbparse.h"
 
 #define RADAR_FETCH_MS   5000
-#define RADAR_FRAME_MS   300                // redraw cadence (aircraft move between fetches)
+#define RADAR_FRAME_MS   40                 // redraw cadence: ~25 fps for the sweep (v3.21: was 300)
+#define RADAR_SWEEP_MS   4000               // one beam revolution (airport radars turn in 4-5 s)
+#define RADAR_TRAIL_DEG  70                 // length of the fading trail behind the beam
+#define RADAR_TRAIL_SEG  28                 // trail drawn as this many wedges (2.5 deg each)
 #define RADAR_MAX        96                 // aircraft kept per fetch (busy airspace near Schiphol)
 #define RADAR_R          200                // outer ring radius, px
 #define RADAR_KM_DEG     111.32f
@@ -333,6 +341,41 @@ static void radarPos(const AdsbPlane &a, uint32_t fetchedAt, float *dxKm, float 
   *dyKm = (lat - radarLat) * RADAR_KM_DEG;
 }
 
+// Beam angle now, radians clockwise from north.
+static float radarBeam() { return (millis() % RADAR_SWEEP_MS) * (2.0f * PI / RADAR_SWEEP_MS); }
+
+// How long since the beam passed bearing b (radians): 0 = just now, 1 = a full turn ago.
+static float radarSince(float b) {
+  float d = radarBeam() - b;
+  while (d < 0) d += 2.0f * PI;
+  while (d >= 2.0f * PI) d -= 2.0f * PI;
+  return d / (2.0f * PI);
+}
+
+// Mix the plane colour from bright (just swept) to dim (a turn ago).
+static uint16_t radarEcho(float since, int r, int g, int b) {
+  float f = 1.0f - 0.65f * since;                    // 100% -> 35%
+  return RGB565((int)(r * f), (int)(g * f), (int)(b * f));
+}
+
+// The beam: a fan of thin wedges fading from green into the background, then the bright edge.
+static void radarSweep(int cx, int cy) {
+  float a = radarBeam(), seg = RADAR_TRAIL_DEG * PI / 180.0f / RADAR_TRAIL_SEG;
+  int R = RADAR_R - 2;
+  for (int i = RADAR_TRAIL_SEG - 1; i >= 0; i--) {   // oldest first, so the brightest wedge is on top
+    float a0 = a - (i + 1) * seg, a1 = a - i * seg + 0.01f;
+    float k = 1.0f - (float)i / RADAR_TRAIL_SEG;     // 1 at the beam, ->0 at the tail
+    k = k * k;
+    int R8 = 4 + (int)(26 * k), G8 = 10 + (int)(150 * k), B8 = 28 + (int)(22 * k);   // bg (4,10,28) -> green
+    gfx->fillTriangle(cx, cy, cx + (int)(sinf(a0) * R), cy - (int)(cosf(a0) * R),
+                      cx + (int)(sinf(a1) * R), cy - (int)(cosf(a1) * R), RGB565(R8, G8, B8));
+  }
+  int ex = cx + (int)(sinf(a) * R), ey = cy - (int)(cosf(a) * R);
+  gfx->drawLine(cx, cy, ex, ey, RGB565(150, 255, 170));
+  gfx->drawLine(cx + 1, cy, ex + 1, ey, RGB565(150, 255, 170));
+  gfx->drawLine(cx, cy + 1, ex, ey + 1, RGB565(90, 230, 120));
+}
+
 static void radarGrid(int cx, int cy) {
   for (int k = 1; k <= 4; k++) {
     gfx->drawCircle(cx, cy, RADAR_R * k / 4, RADAR_GRID);
@@ -350,7 +393,7 @@ static void radarGrid(int cx, int cy) {
   radarText(cx + RADAR_R * 3 / 4 - (int)strlen(lab) * 12 - 4, cy - 20, lab, 2, RADAR_GRID);
 }
 
-static void radarPlane(const AdsbPlane &a, int x, int y, int cx, int cy) {
+static void radarPlane(const AdsbPlane &a, int x, int y, int cx, int cy, uint16_t body, uint16_t vec) {
   float t = a.track * PI / 180.0f, s = sinf(t), c = cosf(t);
   // speed vector: one minute of travel x1.5, at this range's scale (clipped at the ring)
   if (a.gs > 0) {
@@ -362,14 +405,14 @@ static void radarPlane(const AdsbPlane &a, int x, int y, int cx, int cy) {
     float d = sqrtf((float)(ex - cx) * (ex - cx) + (float)(ey - cy) * (ey - cy));
     if (d > RADAR_R) { float f = (RADAR_R - sqrtf((float)(x - cx) * (x - cx) + (float)(y - cy) * (y - cy))) / (d - sqrtf((float)(x - cx) * (x - cx) + (float)(y - cy) * (y - cy)) + 0.01f);
                        if (f < 0) f = 0; if (f > 1) f = 1; ex = x + (int)((ex - x) * f); ey = y + (int)((ey - y) * f); }
-    gfx->drawLine(x, y, ex, ey, RADAR_TRACK);
-    gfx->drawLine(x + 1, y, ex + 1, ey, RADAR_TRACK);
+    gfx->drawLine(x, y, ex, ey, vec);
+    gfx->drawLine(x + 1, y, ex + 1, ey, vec);
   }
   // triangle: nose 14 px ahead, tail 6 px behind, 8 px either side
   int nx = x + (int)(s * 14), ny = y - (int)(c * 14);
   int bx = x - (int)(s * 6),  by = y + (int)(c * 6);
   int wx = (int)(c * 8), wy = (int)(s * 8);
-  gfx->fillTriangle(nx, ny, bx + wx, by + wy, bx - wx, by - wy, RADAR_PLANE);
+  gfx->fillTriangle(nx, ny, bx + wx, by + wy, bx - wx, by - wy, body);
   // tag: callsign, then altitude / type
   int tx = x + 14, ty = y - 14;
   if (tx > cx + RADAR_R - 70) tx = x - 14 - (int)strlen(a.flight) * 12;   // flip to the left near the east edge
@@ -405,6 +448,7 @@ void showRadar() {
   snprintf(status, sizeof(status), "%s", radarStatus);
   xSemaphoreGive(radarLock);
 
+  radarSweep(cx, cy);                                // v3.21: under the rings and the planes
   radarGrid(cx, cy);
   float pxPerKm = RADAR_R / radarOuterKm();
   int inside = 0;
@@ -415,7 +459,8 @@ void showRadar() {
     float r = sqrtf(dx * dx + dy * dy) * pxPerKm;
     if (r <= RADAR_R - 6) {
       int px = cx + (int)(dx * pxPerKm), py = cy - (int)(dy * pxPerKm);
-      radarPlane(snap[i], px, py, cx, cy);
+      float since = radarSince(atan2f(dx, dy));         // bearing, clockwise from north
+      radarPlane(snap[i], px, py, cx, cy, radarEcho(since, 255, 40, 40), radarEcho(since, 255, 0, 255));
       if (radarHitN < RADAR_MAX) {
         radarHitX[radarHitN] = px; radarHitY[radarHitN] = py;
         int tw = (int)strlen(snap[i].flight) * 12, tx = px + 14;
@@ -427,7 +472,7 @@ void showRadar() {
       inside++;
     } else if (r > 0) {                               // beyond the ring: a dot on the rim, right bearing
       int rx = cx + (int)(dx * pxPerKm / r * (RADAR_R + 14)), ry = cy - (int)(dy * pxPerKm / r * (RADAR_R + 14));
-      gfx->fillCircle(rx, ry, 4, RADAR_PLANE);
+      gfx->fillCircle(rx, ry, 4, radarEcho(radarSince(atan2f(dx, dy)), 255, 40, 40));
     }
   }
   // status, small, under N; HOME at the bottom
@@ -573,7 +618,14 @@ void radarTick() {
     if (millis() - lastDetail < 1000) return;
     lastDetail = millis();
   }
+  uint32_t f0 = millis();
   showRadar();
+  // v3.21: how long a frame takes, once a minute (it should stay well under RADAR_FRAME_MS)
+  static uint32_t lastLog = 0;
+  if (!radarDetail && millis() - lastLog > 60000) {
+    lastLog = millis();
+    Serial.printf("radar  : sweep frame %lu ms\n", (unsigned long)(millis() - f0));
+  }
 }
 
 void radarTap(int x, int y) {

@@ -712,6 +712,19 @@ buffer first, and only started after 45 px of finger travel. Now:
 - Serial log: `-> (home: armed - tap again to open)` and `tap    : double tap -> open <APP>`.
 - Build: **2,748,007 bytes** (58%).
 
+## v3.21 - radar sweep
+
+`preview_radar_sweep.gif`. The radar now looks like a real scope:
+
+- A green **beam turns clockwise** once every 4 s (`RADAR_SWEEP_MS`), with a 70 degree trail fading into the
+  background (`radarSweep()`: 28 thin wedges, drawn under the rings and the planes).
+- **Echoes**: each aircraft (and each rim dot) is brightest just after the beam passes over its bearing and dims
+  to 35% over one turn (`radarSince()`, `radarEcho()`). Callsigns and altitudes stay full brightness.
+- Frame cadence 300 ms -> **40 ms** (~25 fps). The beam angle comes from `millis()`, so it turns at the right
+  speed even if a frame is slow; `radar  : sweep frame N ms` in the serial log once a minute shows the cost.
+  The detail screen still redraws once a second.
+- Build: **2,749,067 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
