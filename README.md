@@ -766,6 +766,21 @@ screen or the screensaver, shows a THANKS DANNY! splash with confetti for 1.8 s)
   candidate with the reason (too dull / loud too long). Tune the `CLAP_*` defines from those.
 - Build: **2,781,511 bytes** (58%).
 
+## v3.24 - clap: answer after the applause, not during it
+
+Hardware feedback: detection works, but the badge started talking on the first clap while people were
+still clapping, so "thanks" was lost in the noise.
+
+- Claps are now **counted**, not answered: after each clap the detector is deaf for only `CLAP_GAP_MS`
+  (120 ms) so it hears the next one. It answers once nothing louder than 4x the room noise has been heard
+  for `CLAP_QUIET_MS` (**700 ms**), or at the latest `CLAP_ROUND_MAX` (6 s) after the first clap. Then the
+  2 s cooldown as before.
+- The splash says how many it heard: `*clap*`, `*clap* *clap*`, `*clap* x5`.
+- Simulated: 1 clap -> answer 0.86 s later; 5 claps 0.3 s apart -> one answer 0.78 s after the last;
+  12 fast claps -> one answer 0.8 s after the last.
+- Serial: `clap   : quiet again after N clap(s) in T ms - answering`.
+- Build: **2,781,939 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

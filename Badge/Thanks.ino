@@ -17,6 +17,9 @@
  *     and smooth (~0.3-0.5). That one test is what keeps "Ha!" and "stop!" from counting;
  *   - the onset is only a clap if the sound has died away again within CLAP_DECAY_MS (a door or a
  *     shout keeps going). Then CLAP_COOLDOWN_MS of deafness.
+ *   - v3.24: it does not answer the first clap straight away. People clap several times, and the
+ *     voice was lost in the applause - so claps are counted, and the badge answers once it has been
+ *     quiet for CLAP_QUIET_MS (nothing louder than 4x the room noise);
  *   - while one of the badge's own sounds plays (Decider / Sos / Rumours busy flags) and for a moment after,
  *     everything is ignored, so the badge does not answer itself.
  * The task only raises a flag; thanksTick() in loop() does the talking and the drawing.
@@ -39,7 +42,10 @@
 #define CLAP_DECAY_MS    100                  // must have died down to CLAP_DECAY_LVL by then
 #define CLAP_HF_MIN      0.6f                 // brightness: rms(diff) / rms - claps ~1.4, voices < 0.5
 #define CLAP_DECAY_LVL   0.25f                // of the onset block's RMS
-#define CLAP_COOLDOWN_MS 2000
+#define CLAP_COOLDOWN_MS 2000                // after answering
+#define CLAP_GAP_MS      120                  // between claps of one round of applause
+#define CLAP_QUIET_MS    700                  // v3.24: answer once it has been quiet this long ...
+#define CLAP_ROUND_MAX   6000                 // ... or at the latest this long after the first clap
 #define CLAP_SPK_GUARD   500                  // deaf this long after the speaker switches off
 #define CLAP_MIC_GAIN    GAIN_24DB
 #define THANKS_SHOW_MS   1800                 // the splash stays up this long
@@ -47,6 +53,7 @@
 
 static volatile bool clapPending = false;
 static volatile uint32_t clapCount = 0;
+static volatile int clapRoundSize = 0;       // claps in the round that was just answered
 static bool clapReady = false;
 static uint32_t thanksUntil = 0;              // splash on screen until (0 = no splash)
 
@@ -88,6 +95,8 @@ void clapTask(void *arg) {
   int onsetPeak = 0;
   float onsetHf = 0;
   uint32_t onsetAt = 0;
+  int roundClaps = 0;                       // v3.24: claps heard, not answered yet
+  uint32_t roundStart = 0, lastLoud = 0;
   for (;;) {
     size_t got = decI2s.readBytes((char *)buf, sizeof(buf));
     uint32_t now = millis();
@@ -106,6 +115,16 @@ void clapTask(void *arg) {
     if (peak == 0) silentBlocks++;
     blocks++;
 
+    // v3.24: the applause is over (or has gone on long enough) - now answer it.
+    if (rms > floorRms * 4) lastLoud = now;
+    if (roundClaps && (now - lastLoud >= CLAP_QUIET_MS || now - roundStart >= CLAP_ROUND_MAX)) {
+      clapRoundSize = roundClaps;
+      clapPending = true;
+      deafUntil = now + CLAP_COOLDOWN_MS;
+      printf("clap   : quiet again after %d clap(s) in %lu ms - answering\n", roundClaps,
+             (unsigned long)(now - roundStart));
+      roundClaps = 0;
+    }
     if (sndBusy || sosSndBusy || rumBusy) deafUntil = now + CLAP_SPK_GUARD;   // our own speaker is playing
     if ((int32_t)(now - deafUntil) < 0) { inEvent = false; prevRms = rms; continue; }
 
@@ -113,8 +132,10 @@ void clapTask(void *arg) {
       if (rms < onsetRms * CLAP_DECAY_LVL) {                         // died away: a clap
         inEvent = false;
         clapCount++;
-        clapPending = true;
-        deafUntil = now + CLAP_COOLDOWN_MS;
+        if (!roundClaps) roundStart = now;
+        roundClaps++;
+        lastLoud = now;
+        deafUntil = now + CLAP_GAP_MS;                             // listen for the next one
         printf("clap   : CLAP #%lu - peak %d, rms %.0f (floor %.0f, x%.0f), brightness %.2f, gone in %lu ms\n",
                (unsigned long)clapCount, onsetPeak, onsetRms, floorRms, onsetRms / floorRms, onsetHf,
                (unsigned long)(now - onsetAt));
@@ -156,7 +177,7 @@ void thanksStart() {
     return;
   }
   clapReady = true;
-  Serial.printf("clap   : listening - clap once for \"Thanks Danny!\" (%.2f s of voice)\n",
+  Serial.printf("clap   : listening - clap for \"Thanks Danny!\" (said once the applause stops; %.2f s of voice)\n",
                 SND_THANKS_LEN / (float)CLAP_RATE);
 }
 
@@ -186,7 +207,11 @@ static void thanksSplash() {
   }
   gfx->setFont();
   gfx->setTextSize(1);
-  uiCentred(112, "*clap*", &UiBig, RGB565(150, 170, 210));
+  char what[24];                                                   // v3.24: how many claps it heard
+  if (clapRoundSize <= 1)      snprintf(what, sizeof(what), "*clap*");
+  else if (clapRoundSize == 2) snprintf(what, sizeof(what), "*clap* *clap*");
+  else                         snprintf(what, sizeof(what), "*clap* x%d", clapRoundSize);
+  uiCentred(112, what, &UiBig, RGB565(150, 170, 210));
   gfx->flush();
 }
 
@@ -202,7 +227,8 @@ void thanksTick() {
   bool fromSaver = saverActive();
   if (fromSaver) saverWake(screen != ST_HOME, "clap");
   else saverPoke();
-  Serial.printf("clap   : -> Thanks Danny!%s\n", sosMuted ? " (muted: splash only)" : "");
+  Serial.printf("clap   : -> Thanks Danny! (%d clap%s)%s\n", clapRoundSize, clapRoundSize == 1 ? "" : "s",
+                sosMuted ? " (muted: splash only)" : "");
   sosPlay(SND_THANKS, SND_THANKS_LEN, THANKS_GAIN);               // Sos.ino; does nothing when muted
   if (screen == ST_HOME) {
     thanksSplash();
