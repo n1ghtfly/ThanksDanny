@@ -1047,7 +1047,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.25 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, slap, settings + screensaver + clap ===");
+  Serial.println("=== Thanks Danny badge v3.26 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1120,7 +1120,6 @@ void setup() {
   webBegin();                                  // v3.13: the setup page, on every network
   showScreen(ST_HOME);
   saverPoke();                                 // the idle clock starts at the home screen
-  thanksStart();                               // v3.23: microphones on, clap detector (Thanks.ino)
   Serial.printf("touch  : polled every %d ms, tap guard %d ms\n", POLL_MS, TAP_GUARD_MS);
   Serial.println("ready");
 }
@@ -1192,7 +1191,6 @@ void loop() {
   if (screen == ST_SLAP && !saverActive()) { void sosTick(); sosTick(); }   // swing detection
   if (screen == ST_RADAR && !saverActive()) radarTick();             // aircraft glide, fresh data
   if (screen == ST_ORACLE && !saverActive()) oracleTick();           // a shake asks the oracle
-  thanksTick();                                                       // v3.23: a clap -> "Thanks Danny!"
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
   // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
   // printed just before it in the log show what was running.

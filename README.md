@@ -797,6 +797,15 @@ reproduced in the host simulation first:
   die away. Logged as brightness -1.
 - Build: **2,782,031 bytes** (58%).
 
+## v3.26 - clap detection removed
+
+The owner tried v3.23-v3.25 on the badge and decided against it: removed again. Gone: `Thanks.ino`,
+`thanks_sound.h`, `src/es7210.*`, `src/audio_hal.h`, `tools/make_thanks_sound.py`, the preview, and the
+`thanksStart()` / `thanksTick()` calls. The microphones are unused again (the ES7210 is left unconfigured,
+as before v3.23). The v3.23-v3.25 sections above stay as a record - the driver came from Waveshare's
+`06_ES7210` example if it is ever wanted again.
+- Build: **2,749,067 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
