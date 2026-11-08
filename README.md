@@ -740,6 +740,32 @@ Fix: `Serial.setTxTimeoutMs(0)` right after `Serial.begin()`. A log line that do
 instead of waited for. Logging with the monitor open is unchanged.
 - Build: **2,749,087 bytes** (58%).
 
+## v3.23 - clap detection: "Thanks Danny!"
+
+`preview_thanks_clap.png`. Clap once near the badge and it says **"Thanks Danny!"** (and, on the home
+screen or the screensaver, shows a THANKS DANNY! splash with confetti for 1.8 s).
+
+- **Microphones**: the board's two MEMS mics go through an **ES7210** ADC (I2C 0x40). Its data line is
+  GPIO 10 - already the DIN of the Decider's I2S port (`decI2s`), so no new pins: `thanksStart()` brings
+  the audio path up at boot, configures the ES7210 (slave, 16 kHz, 16-bit, mic gain 24 dB) and starts
+  reading the RX side. Driver `src/es7210.cpp/.h` + `src/audio_hal.h`: Espressif's (MIT), from Waveshare's
+  `06_ES7210` Arduino example for this board, unchanged.
+- **Detector** (`Thanks.ino`, task on core 0, 8 ms blocks): a clap must (1) peak above `CLAP_MIN_PEAK`,
+  (2) be `CLAP_RATIO` x the room-noise average, (3) be `CLAP_ATTACK` x the previous block (sharp start),
+  (4) be BRIGHT - rms of the sample differences / rms >= `CLAP_HF_MIN` (claps ~1.4, voiced speech <0.5),
+  (5) die down to 25% within `CLAP_DECAY_MS`. Then 2 s cooldown. Deaf while the badge's own sounds play
+  (`sndBusy` / `sosSndBusy` / `rumBusy`) and 0.5 s after.
+  Simulated on host first (synthetic claps with and without room echo, Piper TTS speech at 1x/3x/6x,
+  "Ha!"/"stop!"/"cut!" plosives, a door slam): without test (4) speech gave 5 false claps; with it 0,
+  and all 4 claps found. Not caught: a clap *during* loud talking (masked).
+- **Voice**: `thanks_sound.h`, 0.86 s, 16 kHz mono PCM in flash (27 kB), played with `sosPlay()` - so the
+  slap **mute** setting also silences it (the splash still shows). Made offline with Piper TTS, voice
+  en-us-ryan-high (CC BY-NC-SA 4.0). `tools/make_thanks_sound.py <any audio file>` regenerates it - e.g.
+  from a phone recording of Danny himself.
+- Serial: `clap   :` lines - room noise once a minute, every clap with its numbers, and every rejected
+  candidate with the reason (too dull / loud too long). Tune the `CLAP_*` defines from those.
+- Build: **2,781,511 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
