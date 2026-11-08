@@ -18,8 +18,13 @@
  *   - the onset is only a clap if the sound has died away again within CLAP_DECAY_MS (a door or a
  *     shout keeps going). Then CLAP_COOLDOWN_MS of deafness.
  *   - v3.24: it does not answer the first clap straight away. People clap several times, and the
- *     voice was lost in the applause - so claps are counted, and the badge answers once it has been
- *     quiet for CLAP_QUIET_MS (nothing louder than 4x the room noise);
+ *     voice was lost in the applause - so claps are counted, and the badge answers CLAP_QUIET_MS
+ *     after the last clap. (v3.25: v3.24 waited for the ROOM to be quiet, and ordinary talking kept
+ *     resetting that, so the badge often seemed not to react for up to 6 s);
+ *   - v3.25: a clap close to the badge overloads (clips) the mic; flat-topped samples look "dull" to
+ *     the brightness test, so a clipped onset skips that test - nothing dull is that loud;
+ *   - v3.25: the clap's level is its loudest block, not the first one (a clap starting at the end of
+ *     an 8 ms block made the first block quiet, the decay test then never passed);
  *   - while one of the badge's own sounds plays (Decider / Sos / Rumours busy flags) and for a moment after,
  *     everything is ignored, so the badge does not answer itself.
  * The task only raises a flag; thanksTick() in loop() does the talking and the drawing.
@@ -44,7 +49,7 @@
 #define CLAP_DECAY_LVL   0.25f                // of the onset block's RMS
 #define CLAP_COOLDOWN_MS 2000                // after answering
 #define CLAP_GAP_MS      120                  // between claps of one round of applause
-#define CLAP_QUIET_MS    700                  // v3.24: answer once it has been quiet this long ...
+#define CLAP_QUIET_MS    800                  // answer this long after the LAST clap heard (v3.25) ...
 #define CLAP_ROUND_MAX   6000                 // ... or at the latest this long after the first clap
 #define CLAP_SPK_GUARD   500                  // deaf this long after the speaker switches off
 #define CLAP_MIC_GAIN    GAIN_24DB
@@ -96,17 +101,18 @@ void clapTask(void *arg) {
   float onsetHf = 0;
   uint32_t onsetAt = 0;
   int roundClaps = 0;                       // v3.24: claps heard, not answered yet
-  uint32_t roundStart = 0, lastLoud = 0;
+  uint32_t roundStart = 0, lastClap = 0;
   for (;;) {
     size_t got = decI2s.readBytes((char *)buf, sizeof(buf));
     uint32_t now = millis();
     int n = got / 2;
     if (n <= 0) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
-    int peak = 0;
+    int peak = 0, clipped = 0;
     float sum = 0, dsum = 0;
     for (int i = 0; i < n; i++) {
       int v = buf[i]; if (v < 0) v = -v;
       if (v > peak) peak = v;
+      if (v >= 32000) clipped++;
       sum += (float)buf[i] * buf[i];
       if (i >= 2) { float d = (float)buf[i] - buf[i - 2]; dsum += d * d; }   // same mic (stereo)
     }
@@ -115,9 +121,8 @@ void clapTask(void *arg) {
     if (peak == 0) silentBlocks++;
     blocks++;
 
-    // v3.24: the applause is over (or has gone on long enough) - now answer it.
-    if (rms > floorRms * 4) lastLoud = now;
-    if (roundClaps && (now - lastLoud >= CLAP_QUIET_MS || now - roundStart >= CLAP_ROUND_MAX)) {
+    // The applause is over (no clap for CLAP_QUIET_MS) or has gone on long enough - answer it.
+    if (roundClaps && (now - lastClap >= CLAP_QUIET_MS || now - roundStart >= CLAP_ROUND_MAX)) {
       clapRoundSize = roundClaps;
       clapPending = true;
       deafUntil = now + CLAP_COOLDOWN_MS;
@@ -129,26 +134,28 @@ void clapTask(void *arg) {
     if ((int32_t)(now - deafUntil) < 0) { inEvent = false; prevRms = rms; continue; }
 
     if (inEvent) {
+      if (rms > onsetRms) onsetRms = rms;                            // the clap's loudest block
+      if (peak > onsetPeak) onsetPeak = peak;
       if (rms < onsetRms * CLAP_DECAY_LVL) {                         // died away: a clap
         inEvent = false;
         clapCount++;
         if (!roundClaps) roundStart = now;
         roundClaps++;
-        lastLoud = now;
+        lastClap = now;
         deafUntil = now + CLAP_GAP_MS;                             // listen for the next one
-        printf("clap   : CLAP #%lu - peak %d, rms %.0f (floor %.0f, x%.0f), brightness %.2f, gone in %lu ms\n",
+        printf("clap   : CLAP #%lu - peak %d, rms %.0f (floor %.0f, x%.0f), brightness %.2f (-1 = clipped), gone in %lu ms\n",
                (unsigned long)clapCount, onsetPeak, onsetRms, floorRms, onsetRms / floorRms, onsetHf,
                (unsigned long)(now - onsetAt));
-      } else if (now - onsetAt > CLAP_DECAY_MS) {                    // still loud: not a clap
+      } else if (now - onsetAt > (onsetHf < 0 ? CLAP_DECAY_MS * 8 / 5 : CLAP_DECAY_MS)) {   // still loud: not a clap (clipped: 160 ms)
         inEvent = false;
         deafUntil = now + 300;
         printf("clap   : ignored - loud for over %d ms (peak %d, rms %.0f, floor %.0f)\n",
                CLAP_DECAY_MS, onsetPeak, onsetRms, floorRms);
       }
     } else if (peak > CLAP_MIN_PEAK && rms > floorRms * CLAP_RATIO && rms > prevRms * CLAP_ATTACK) {
-      if (hf >= CLAP_HF_MIN) {
+      if (hf >= CLAP_HF_MIN || clipped >= 4) {                       // clipped: too loud to judge, and loud enough
         inEvent = true;
-        onsetRms = rms; onsetPeak = peak; onsetAt = now; onsetHf = hf;
+        onsetRms = rms; onsetPeak = peak; onsetAt = now; onsetHf = clipped >= 4 ? -1 : hf;
       } else {
         printf("clap   : ignored - too dull for a clap (brightness %.2f < %.2f, peak %d)\n", hf, CLAP_HF_MIN, peak);
         deafUntil = now + 300;

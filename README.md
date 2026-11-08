@@ -781,6 +781,22 @@ still clapping, so "thanks" was lost in the noise.
 - Serial: `clap   : quiet again after N clap(s) in T ms - answering`.
 - Build: **2,781,939 bytes** (58%).
 
+## v3.25 - clap: "often does not react"
+
+Hardware feedback after v3.24: claps were often ignored, as if the detector were stuck. Three causes, all
+reproduced in the host simulation first:
+
+- **Waiting for a quiet room**: v3.24 answered once nothing louder than 4x the room noise had been heard
+  for 700 ms. Talking or office noise kept resetting that, so the answer often only came at the 6 s limit.
+  Now: answer **800 ms after the last clap** heard (`lastClap`), whatever else the room does.
+- **Clap split over two blocks**: a clap starting at the end of an 8 ms block made that block the
+  "onset" with a low level, and the decay test (25% of the onset) then failed. Simulated with claps at a
+  block edge: v3.24 found 1 of 5, v3.25 5 of 5. The event now tracks its **loudest** block.
+- **Clipping**: a clap close to the mics clips at 24 dB gain; flat-topped samples fail the brightness test.
+  A clipped onset (>= 4 samples at full scale) now skips that test, and gets 160 ms instead of 100 ms to
+  die away. Logged as brightness -1.
+- Build: **2,782,031 bytes** (58%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
