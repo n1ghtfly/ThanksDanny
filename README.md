@@ -837,6 +837,24 @@ Roman-numeral dial (`assets/clock_dial_src.jpg`), with the movement in the middl
   that file's own `#include`s, and `clkBlit()` takes a `ClkSprite *`.
 - Build: **3,156,015 bytes** (66%; the clock adds ~400 kB of images).
 
+## v3.28 - clock: sweeping seconds, faster frames
+
+Hardware feedback on v3.27: the seconds were not smooth.
+
+- **Sweep instead of tick**: v3.27 ticked 4 beats/s with an ease-out jump; with a frame rate that is not a
+  multiple of 4 (and varies), each beat was shown for a different number of frames - visible stutter.
+  Now the seconds hand sweeps continuously (time to the microsecond from `gettimeofday`), the wheels turn
+  smoothly, the minute and hour hands move continuously too. The balance still swings at 2 Hz.
+- **Dirty rectangle**: only the movement window plus the boxes of the hands now and last frame are
+  restored from the dial and sent to the panel (as one full-width band, which `flushRect` sends without
+  copying). Full redraw only on the first frame and when the burn-in shift moves (every 2 minutes).
+- **Sprites in PSRAM**: copied from flash once when the app opens (`clkLoadSprites`, ~310 kB). The
+  rotations read the sprites in scattered order, and octal PSRAM fills cache misses ~4x faster than
+  quad flash.
+- Serial: `clock  : HH:MM:SS, frame N ms avg = restore a + movement b + hands c + flush d` every ~20 s,
+  so the next optimisation can aim at the real cost.
+- Build: **3,156,607 bytes** (66%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

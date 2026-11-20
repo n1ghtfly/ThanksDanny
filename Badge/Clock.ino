@@ -1,5 +1,5 @@
 /*
- * Clock (v3.27) - a steampunk pocket watch: the owner's gilded Roman-numeral dial, with a movement
+ * Clock (v3.27, v3.28) - a steampunk pocket watch: the owner's gilded Roman-numeral dial, with a movement
  * behind a window in the middle whose wheels really turn.
  *
  * - The dial (bezel + numeral ring) is the owner's picture; the window inside the numerals shows a
@@ -8,31 +8,67 @@
  *   steel bridges with ruby jewels and blued screws, and gilded Breguet hands. The moving parts are
  *   RGB565 sprites rotated per frame (nearest pixel, 3-level alpha). See tools/make_clock_assets.py:
  *   the train is laid out and phased there so the teeth mesh while they turn.
- * - It TICKS like a watch: 4 beats a second. On each beat the train jumps forward (ease-out over
- *   70 ms) and so does the seconds hand; the balance swings to and fro once per 2 beats (2 Hz).
- *   Wheel A turns once a minute, the others at their gear ratios.
+ * - v3.28: the seconds hand SWEEPS (continuous, like a fine mechanical watch) and the wheels turn
+ *   smoothly; v3.27 ticked 4 times a second, and with the frame rate not a multiple of that the ticks
+ *   came out uneven. The balance swings to and fro at 2 Hz. Wheel A turns once a minute.
  * - Time: the system clock (NTP via configTzTime in setup(), Europe/Amsterdam with DST). Until it
  *   has synced the hands rest at 10:08 and "WAITING FOR TIME" shows in the window.
  * - Burn-in: the AMOLED shows this dial for as long as you leave it, so the whole picture moves by
  *   a pixel or two every 2 minutes (9 positions). The screensaver does not take over this screen.
  * - Tap anywhere: home.
  *
- * Cost per frame (every CLK_FRAME_MS): copy the dial into the canvas, ~180k sprite pixels checked,
- * flush. The sprites only touch the box their visible pixels can reach (ClkSprite.reach).
+ * Cost per frame (every CLK_FRAME_MS). v3.28 made it cheaper:
+ *   - only the DIRTY rectangle is restored from the dial and sent to the panel: the movement window
+ *     plus where the hands are now and where they were last frame (full-width band, no copy);
+ *   - the sprites are copied from flash into PSRAM when the app opens (octal PSRAM fills cache
+ *     misses ~4x faster than quad flash, and the rotations read the sprites all over the place);
+ *   - the serial log breaks the frame down: restore / movement / hands / flush, in ms.
  */
 
 // clock_assets.h is included by Badge.ino (Arduino puts the prototypes above this file's includes)
 
 #define CLK_FRAME_MS   50                  // 20 fps when a frame is cheap enough ...
 #define CLK_GAP_MS     15                  // ... but always this much loop() time between frames
-#define CLK_BEATS      4                   // beats per second (14400 per hour)
-#define CLK_EASE       0.28f               // part of a beat the jump takes
+#define CLK_BAL_HZ     2.0f                // balance swings per second
 #define CLK_BAL_AMP    2.6f                // balance amplitude, radians (~150 deg)
 
 static uint16_t *clkBg = nullptr;          // the decoded dial, 466 x 466 RGB565 in PSRAM
 static uint32_t clkLast = 0, clkEnd = 0;   // start / end of the last frame
 static int clkOx = 0, clkOy = 0;           // burn-in shift
 static uint32_t clkFrames = 0, clkCostMs = 0;
+static uint32_t clkUs[4];                  // restore / movement / hands / flush, summed (us)
+static int clkPx0, clkPy0, clkPx1, clkPy1; // where the hands were last frame
+static int clkLastSlot = -1;               // burn-in position of the last frame (-1: full redraw)
+
+// v3.28: PSRAM copies of every sprite (same order as below), made when the app first opens.
+#define CLK_NSPR (CLK_NGEARS + 5)          // gears, balance, bridges, 3 hands
+static ClkSprite clkS[CLK_NSPR];
+static bool clkSprReady = false;
+
+static const ClkSprite *clkSrc(int i) {
+  if (i < CLK_NGEARS) return CLK_GEARS[i].s;
+  static const ClkSprite *rest[5] = { &CLK_BALANCE, &CLK_BRIDGES, &CLK_HAND_H, &CLK_HAND_M, &CLK_HAND_S };
+  return rest[i - CLK_NGEARS];
+}
+
+static void clkLoadSprites() {
+  if (clkSprReady) return;
+  uint32_t t0 = millis(), bytes = 0;
+  for (int i = 0; i < CLK_NSPR; i++) {
+    const ClkSprite *f = clkSrc(i);
+    clkS[i] = *f;                                       // falls back to the flash copy if no PSRAM
+    size_t np = (size_t)f->w * f->h, na = (np + 3) / 4;
+    uint16_t *p = (uint16_t *)heap_caps_malloc(np * 2, MALLOC_CAP_SPIRAM);
+    uint8_t *a = (uint8_t *)heap_caps_malloc(na, MALLOC_CAP_SPIRAM);
+    if (p && a) {
+      memcpy(p, f->pix, np * 2); memcpy(a, f->a, na);
+      clkS[i].pix = p; clkS[i].a = a;
+      bytes += np * 2 + na;
+    } else { if (p) heap_caps_free(p); if (a) heap_caps_free(a); }
+  }
+  clkSprReady = true;
+  Serial.printf("clock  : sprites in PSRAM: %lu kB in %lu ms\n", (unsigned long)(bytes / 1024), (unsigned long)(millis() - t0));
+}
 
 static bool clkLoadDial() {
   if (clkBg) return true;
@@ -58,13 +94,12 @@ static inline uint16_t clkHalf(uint16_t a, uint16_t b) {   // 50% mix of two RGB
   return ((a & 0xF7DE) >> 1) + ((b & 0xF7DE) >> 1);
 }
 
-// Draw sprite s rotated by ang (radians, clockwise on screen) with its pivot at (cx, cy).
-static void clkBlit(uint16_t *fb, const ClkSprite *s, float cx, float cy, float ang) {
+// The screen box sprite s can touch when rotated by ang about (cx, cy), clipped to the panel.
+static void clkBox(const ClkSprite *s, float cx, float cy, float ang, int *bx0, int *by0, int *bx1, int *by1) {
   float c = cosf(ang), sn = sinf(ang);
   int R = (int)ceilf(s->reach) + 1;
   int x0 = (int)cx - R, x1 = (int)cx + R, y0 = (int)cy - R, y1 = (int)cy + R;
-  // Long thin sprites (hands): the box of the rotated sprite rectangle is much smaller.
-  if (s->h > 2 * s->w) {
+  if (s->h > 2 * s->w) {                                // long thin (hands): box of the rotated rectangle
     float cxs[4] = { -s->px, s->w - s->px, s->w - s->px, -s->px };
     float cys[4] = { -s->py, -s->py, s->h - s->py, s->h - s->py };
     float mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
@@ -74,10 +109,15 @@ static void clkBlit(uint16_t *fb, const ClkSprite *s, float cx, float cy, float 
     }
     x0 = (int)(cx + mnx) - 1; x1 = (int)(cx + mxx) + 1; y0 = (int)(cy + mny) - 1; y1 = (int)(cy + mxy) + 1;
   }
-  if (x0 < 0) x0 = 0;
-  if (y0 < 0) y0 = 0;
-  if (x1 > LCD_WIDTH - 1) x1 = LCD_WIDTH - 1;
-  if (y1 > LCD_HEIGHT - 1) y1 = LCD_HEIGHT - 1;
+  *bx0 = x0 < 0 ? 0 : x0; *by0 = y0 < 0 ? 0 : y0;
+  *bx1 = x1 > LCD_WIDTH - 1 ? LCD_WIDTH - 1 : x1; *by1 = y1 > LCD_HEIGHT - 1 ? LCD_HEIGHT - 1 : y1;
+}
+
+// Draw sprite s rotated by ang (radians, clockwise on screen) with its pivot at (cx, cy).
+static void clkBlit(uint16_t *fb, const ClkSprite *s, float cx, float cy, float ang) {
+  float c = cosf(ang), sn = sinf(ang);
+  int x0, y0, x1, y1;
+  clkBox(s, cx, cy, ang, &x0, &y0, &x1, &y1);
   const int32_t C = (int32_t)(c * 65536), S = (int32_t)(sn * 65536);
   const uint32_t w = s->w, h = s->h;
   for (int y = y0; y <= y1; y++) {
@@ -113,23 +153,17 @@ static void clkBlitStatic(uint16_t *fb, const ClkSprite *s, const uint16_t *L, c
   }
 }
 
+static inline void clkGrow(int *u0, int *v0, int *u1, int *v1, int x0, int y0, int x1, int y1) {
+  if (x0 < *u0) *u0 = x0;
+  if (y0 < *v0) *v0 = y0;
+  if (x1 > *u1) *u1 = x1;
+  if (y1 > *v1) *v1 = y1;
+}
+
 static void clkFrame() {
-  uint32_t t0 = millis();
+  uint32_t t0 = millis(), u0 = micros();
   uint16_t *fb = gfx->getFramebuffer();
-  // burn-in shift: one of 9 positions, a new one every 2 minutes
-  int slot = (int)((time(nullptr) / 120) % 9);
-  clkOx = (slot % 3 - 1) * 2;
-  clkOy = (slot / 3 - 1) * 2;
-  // 1. the dial, shifted
-  for (int y = 0; y < LCD_HEIGHT; y++) {
-    uint16_t *dst = fb + y * LCD_WIDTH;
-    int sy = y - clkOy;
-    if (sy < 0 || sy >= LCD_HEIGHT) { memset(dst, 0, LCD_WIDTH * 2); continue; }
-    const uint16_t *src = clkBg + sy * LCD_WIDTH;
-    if (clkOx >= 0) { memset(dst, 0, clkOx * 2); memcpy(dst + clkOx, src, (LCD_WIDTH - clkOx) * 2); }
-    else { memcpy(dst, src - clkOx, (LCD_WIDTH + clkOx) * 2); memset(dst + LCD_WIDTH + clkOx, 0, -clkOx * 2); }
-  }
-  // 2. the time
+  // the time - continuous, to the microsecond
   struct timeval tv;
   gettimeofday(&tv, nullptr);
   struct tm lt;
@@ -137,47 +171,83 @@ static void clkFrame() {
   localtime_r(&now, &lt);
   bool synced = lt.tm_year >= 120;
   int hh = synced ? lt.tm_hour : 10, mm = synced ? lt.tm_min : 8, ss = synced ? lt.tm_sec : 0;
-  double secOfDay = hh * 3600.0 + mm * 60.0 + ss + tv.tv_usec / 1e6;
-  double T = secOfDay * CLK_BEATS;                 // beats since midnight
-  double k = floor(T);
-  float f = (float)(T - k);
-  float e = f / CLK_EASE; if (e > 1) e = 1;
-  e = 1 - (1 - e) * (1 - e) * (1 - e);             // ease-out: a crisp jump
-  double beat = k + e;
-  float phiA = (float)fmod(beat / (60.0 * CLK_BEATS), 1.0) * 2 * PI;   // wheel A: one turn a minute
+  double sec = ss + (synced ? tv.tv_usec / 1e6 : 0);   // 0 .. 60, smooth
+  double secOfDay = hh * 3600.0 + mm * 60.0 + sec;
+  // burn-in shift: one of 9 positions, a new one every 2 minutes (then the whole screen is redrawn)
+  int slot = (int)((tv.tv_sec / 120) % 9);
+  bool full = slot != clkLastSlot;
+  clkLastSlot = slot;
+  clkOx = (slot % 3 - 1) * 2;
+  clkOy = (slot / 3 - 1) * 2;
   float cx = 233 + clkOx, cy = 233 + clkOy;
-  // 3. the movement: lower wheels first, then balance, front wheels, bridges
-  float bal = CLK_BAL_AMP * sinf((float)fmod(T, 2.0) * PI);
+  // the hands now
+  float aH = (float)(fmod(secOfDay / 43200.0, 1.0) * 2 * PI);
+  float aM = (float)((mm + sec / 60.0) / 60.0 * 2 * PI);
+  float aS = (float)(sec / 60.0 * 2 * PI);
+  const ClkSprite *hs[3] = { &clkS[CLK_NGEARS + 2], &clkS[CLK_NGEARS + 3], &clkS[CLK_NGEARS + 4] };
+  float ha[3] = { aH, aM, aS };
+  int hx0 = LCD_WIDTH, hy0 = LCD_HEIGHT, hx1 = 0, hy1 = 0;
+  for (int i = 0; i < 3; i++) {
+    int a0, b0, a1, b1;
+    clkBox(hs[i], cx, cy, ha[i], &a0, &b0, &a1, &b1);
+    clkGrow(&hx0, &hy0, &hx1, &hy1, a0, b0, a1, b1);
+  }
+  // dirty = the movement window + the hands now + the hands last frame
+  int dx0 = (int)cx - CLK_WIN - 2, dy0 = (int)cy - CLK_WIN - 2, dx1 = (int)cx + CLK_WIN + 2, dy1 = (int)cy + CLK_WIN + 2;
+  clkGrow(&dx0, &dy0, &dx1, &dy1, hx0, hy0, hx1, hy1);
+  if (!full) clkGrow(&dx0, &dy0, &dx1, &dy1, clkPx0, clkPy0, clkPx1, clkPy1);
+  else { dx0 = 0; dy0 = 0; dx1 = LCD_WIDTH - 1; dy1 = LCD_HEIGHT - 1; }
+  if (dx0 < 0) dx0 = 0;
+  if (dy0 < 0) dy0 = 0;
+  if (dx1 > LCD_WIDTH - 1) dx1 = LCD_WIDTH - 1;
+  if (dy1 > LCD_HEIGHT - 1) dy1 = LCD_HEIGHT - 1;
+  clkPx0 = hx0; clkPy0 = hy0; clkPx1 = hx1; clkPy1 = hy1;
+  // 1. restore the dial (shifted) inside the dirty box
+  for (int y = dy0; y <= dy1; y++) {
+    uint16_t *dst = fb + y * LCD_WIDTH;
+    int sy = y - clkOy;
+    int a = dx0, b = dx1;                               // dst columns a..b come from src a-ox..b-ox
+    if (sy < 0 || sy >= LCD_HEIGHT) { memset(dst + a, 0, (b - a + 1) * 2); continue; }
+    if (a - clkOx < 0) { memset(dst + a, 0, (clkOx - a) * 2); a = clkOx; }
+    if (b - clkOx > LCD_WIDTH - 1) { memset(dst + LCD_WIDTH + clkOx, 0, (b - (LCD_WIDTH - 1 + clkOx)) * 2); b = LCD_WIDTH - 1 + clkOx; }
+    if (b >= a) memcpy(dst + a, clkBg + sy * LCD_WIDTH + (a - clkOx), (b - a + 1) * 2);
+  }
+  uint32_t u1 = micros();
+  // 2. the movement: lower wheels first, then balance, front wheels, bridges
+  float phiA = (float)(fmod(secOfDay / 60.0, 1.0) * 2 * PI);   // wheel A: one turn a minute
+  float bal = CLK_BAL_AMP * sinf((float)fmod(secOfDay * CLK_BAL_HZ, 1.0) * 2 * PI);
   for (int i = 0; i < 4; i++) {
     const ClkGear &g = CLK_GEARS[i];
-    clkBlit(fb, g.s, cx + g.x, cy + g.y, g.phase + g.ratio * phiA);
+    clkBlit(fb, &clkS[i], cx + g.x, cy + g.y, g.phase + g.ratio * phiA);
   }
-  clkBlit(fb, &CLK_BALANCE, cx + CLK_BAL_X, cy + CLK_BAL_Y, bal);
+  clkBlit(fb, &clkS[CLK_NGEARS], cx + CLK_BAL_X, cy + CLK_BAL_Y, bal);
   for (int i = 4; i < CLK_NGEARS; i++) {
     const ClkGear &g = CLK_GEARS[i];
-    clkBlit(fb, g.s, cx + g.x, cy + g.y, g.phase + g.ratio * phiA);
+    clkBlit(fb, &clkS[i], cx + g.x, cy + g.y, g.phase + g.ratio * phiA);
   }
-  clkBlitStatic(fb, &CLK_BRIDGES, CLK_BRIDGES_l, CLK_BRIDGES_r, (int)cx - (int)CLK_BRIDGES.px, (int)cy - (int)CLK_BRIDGES.py);
+  const ClkSprite *br = &clkS[CLK_NGEARS + 1];
+  clkBlitStatic(fb, br, CLK_BRIDGES_l, CLK_BRIDGES_r, (int)cx - (int)br->px, (int)cy - (int)br->py);
   if (!synced) uiCentred(233 - 110 + clkOy, "WAITING FOR TIME", &UiSmall, RGB565(230, 210, 160));
-  // 4. the hands (the seconds hand ticks with the beats)
-  float secs = (float)fmod(beat / CLK_BEATS, 60.0);
-  float aH = ((hh % 12) + mm / 60.0f + ss / 3600.0f) / 12.0f * 2 * PI;
-  float aM = (mm + ss / 60.0f) / 60.0f * 2 * PI;
-  float aS = secs / 60.0f * 2 * PI;
-  clkBlit(fb, &CLK_HAND_H, cx, cy, aH);
-  clkBlit(fb, &CLK_HAND_M, cx, cy, aM);
-  clkBlit(fb, &CLK_HAND_S, cx, cy, aS);
+  uint32_t u2 = micros();
+  // 3. the hands, and the centre cap
+  for (int i = 0; i < 3; i++) clkBlit(fb, hs[i], cx, cy, ha[i]);
   int icx = (int)cx, icy = (int)cy;
   gfx->fillCircle(icx, icy, 9, RGB565(60, 36, 10));      // centre cap with a ruby
   gfx->fillCircle(icx, icy, 7, RGB565(226, 186, 96));
   gfx->fillCircle(icx, icy, 3, RGB565(170, 20, 45));
   gfx->drawPixel(icx - 1, icy - 1, RGB565(240, 150, 170));
-  gfx->flush();
+  uint32_t u3 = micros();
+  // 4. send only the rows that changed (a full-width band goes out without a copy)
+  flushRect(0, dy0, LCD_WIDTH, dy1 - dy0 + 1);
+  uint32_t u4 = micros();
+  clkUs[0] += u1 - u0; clkUs[1] += u2 - u1; clkUs[2] += u3 - u2; clkUs[3] += u4 - u3;
   clkCostMs += millis() - t0;
   if (++clkFrames % 400 == 0) {                          // every ~20 s
-    Serial.printf("clock  : %02d:%02d:%02d%s, frame %lu ms avg\n", hh, mm, ss, synced ? "" : " (not synced)",
-                  (unsigned long)(clkCostMs / 400));
-    clkCostMs = 0;
+    Serial.printf("clock  : %02d:%02d:%02d%s, frame %lu ms avg = restore %lu + movement %lu + hands %lu + flush %lu\n",
+                  hh, mm, ss, synced ? "" : " (not synced)", (unsigned long)(clkCostMs / 400),
+                  (unsigned long)(clkUs[0] / 400000), (unsigned long)(clkUs[1] / 400000),
+                  (unsigned long)(clkUs[2] / 400000), (unsigned long)(clkUs[3] / 400000));
+    clkCostMs = 0; memset(clkUs, 0, sizeof(clkUs));
   }
 }
 
@@ -189,7 +259,9 @@ void showClock() {
     gfx->flush();
     return;
   }
-  clkFrames = 0; clkCostMs = 0;
+  clkLoadSprites();
+  clkFrames = 0; clkCostMs = 0; memset(clkUs, 0, sizeof(clkUs));
+  clkLastSlot = -1;                                    // first frame: the whole screen
   Serial.println("clock  : open - tap anywhere for home");
   clkLast = millis();
   clkFrame();
