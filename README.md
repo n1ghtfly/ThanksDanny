@@ -806,6 +806,37 @@ as before v3.23). The v3.23-v3.25 sections above stay as a record - the driver c
 `06_ES7210` example if it is ever wanted again.
 - Build: **2,749,067 bytes** (58%).
 
+## v3.27 - CLOCK app: steampunk pocket watch with a moving movement
+
+`preview_clock.png`, `preview_clock.gif`. New app **CLOCK** (carousel, before SETTINGS): the owner's gilded
+Roman-numeral dial (`assets/clock_dial_src.jpg`), with the movement in the middle window really running.
+
+- **Dial**: cut out of the owner's picture (circle 209.5, 229, r 197.5 in the source), scaled to 466 px.
+  The bezel and numeral ring are kept; the window (r < 137) gets a new movement plate - dark gilt with
+  perlage, recessed wheel sinks, a hairspring - because the photographed movement cannot turn. Stored as
+  an 87 kB JPEG in flash, decoded once into PSRAM (`clkBg`, 434 kB) with the gallery's `decDest` path.
+- **Movement** (all rendered by `tools/make_clock_assets.py` at 4x, scaled down = anti-aliased, RGB565 +
+  2-bit alpha): 8 front wheels and 4 lower-level wheels sharing their arbors, a balance wheel with timing
+  screws, two steel bridges (polished chamfer, Geneva stripes, ruby jewels, blued screws), gilt Breguet
+  hour and minute hands and a crimson seconds hand with counterweight. The train is laid out and phased
+  in the script so the teeth mesh: each child is placed at exactly r1 + r2, its start angle solved so a
+  tooth meets a gap, its speed -(n1/n2) of its parent. No two non-meshing wheels overlap (checked).
+- **Ticking**: 4 beats a second. Each beat the train and the seconds hand jump (ease-out over 70 ms);
+  the balance swings once per 2 beats. Wheel A turns once a minute.
+- **Rendering** (`Clock.ino`): per frame copy the dial into the canvas, rotate every sprite by inverse
+  mapping (16.16 fixed point, nearest pixel, only inside each sprite's `reach`; hands use the box of the
+  rotated rectangle), the static bridges by per-row spans, the hands, a ruby centre cap, flush. Aim
+  20 fps, but always >= 15 ms of `loop()` between frames so touch stays responsive. Serial:
+  `clock  : HH:MM:SS, frame N ms avg` every ~20 s.
+- **Time**: the existing NTP sync (`configTzTime`, Europe/Amsterdam). Not synced yet: hands at 10:08 and
+  "WAITING FOR TIME".
+- **Burn-in**: the screensaver does not take over this screen (it is meant to be left on), so the whole
+  picture shifts by up to 2 px every 2 minutes (9 positions).
+- Tap anywhere: home.
+- `clock_assets.h` is included from `Badge.ino`: Arduino writes the auto-prototypes for `Clock.ino` above
+  that file's own `#include`s, and `clkBlit()` takes a `ClkSprite *`.
+- Build: **3,156,015 bytes** (66%; the clock adds ~400 kB of images).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
