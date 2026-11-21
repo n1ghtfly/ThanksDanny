@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.29, 21 Nov 2026)
+# Thanks Danny badge - project index (v3.30, 21 Nov 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.29)
+## What the badge does (v3.30)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home**: Sons of Sudo wallpaper and an app carousel: one big icon, its neighbours at the sides,
@@ -34,7 +34,7 @@ measurements); this page is the map.
 - **Settings**: Setup (on Wi-Fi: the setup page is at the badge's address or `http://badge-<name>.local`;
   without Wi-Fi: the badge raises its own `ThanksDanny-setup` network), this badge's name, slap sound
   on/off, close. The page covers Wi-Fi, the badge network login and the radar location.
-- **Clock** (v3.29): cyberpunk radar HUD - turning green sweep, scrolling text ring with the Socrates
+- **Clock** (v3.29): cyberpunk radar HUD - turning green sweep, text ring with the Socrates
   quote, amber seconds ring, big glowing time, live status / badge name / Wi-Fi / uptime / date. Tap = home.
   Assets: `tools/make_clock_assets.py` (fonts in `assets/fonts/`, SIL OFL).
 - **Screensaver (SOS MARKETS)**: after 1 minute without a touch the badge dims to a Bloomberg-style
@@ -82,7 +82,7 @@ measurements); this page is the map.
 - Arduino IDE 2 (its built-in arduino-cli), **esp32 core 3.3.x** (3.3.12 used here)
 - Libraries: **GFX Library for Arduino 1.6.8**, **SensorLib 0.5.0**, **TJpg_Decoder 1.1.0**
 - Board settings: in `Badge/sketch.yaml`; Partition Scheme **32M Flash (4.8MB APP/22MB LittleFS)**
-- v3.29 build: 2,957,715 bytes (62% of the app partition)
+- v3.30 build: 2,958,379 bytes (62% of the app partition)
 
 ## Restore from scratch (new PC, or a wiped board)
 

@@ -8,7 +8,7 @@ The face is a green/amber radar HUD. What never changes is drawn here into one b
 (rings, ticks, decorative arcs, the polar grid, the minute numbers). What changes is drawn by the
 badge every frame (Badge/Clock.ino):
   - the radar SWEEP: green light added to the background, by a per-pixel angle table;
-  - the outer TEXT RING scrolling round (a pre-rendered text strip, mapped onto the ring);
+  - the outer TEXT RING (a pre-rendered text strip, mapped onto the ring; static since v3.30);
   - the SECONDS RING: 120 amber bars that fill up through the minute;
   - the TIME in big glowing amber digits (pre-rendered with their glow, added like light);
   - the HUD text: status, badge name, Wi-Fi, uptime, date.

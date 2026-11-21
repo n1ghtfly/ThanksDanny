@@ -879,6 +879,26 @@ is rebuilt here as a live face (the picture itself has a fixed time, garbled tex
 - The steampunk face is gone (its source picture removed from the repo); it is in git history (v3.27-3.28).
 - Build: **2,957,715 bytes** (62%).
 
+## v3.30 - clock: smoother, no more hangs
+
+Hardware feedback on v3.29: the clock sometimes hangs, the animation could be smoother.
+
+Cause: a full-screen flush costs ~46 ms on this panel (byte-swapped through 1024-pixel DMA chunks), and
+v3.29 sent the whole 466 x 466 screen every frame - ~12 fps, with loop() busy almost all the time, so any
+other work at the same moment (Wi-Fi, MQTT, a sync) showed as a hang.
+
+- Every frame now restores, draws and sends only the **centre**: the sweep disk with the time and HUD text
+  (a 314 x 314 box via `flushRect`, ~45% of the screen).
+- **Seconds bars** are redrawn only when they change (twice a second: the new bar and the end of the bright
+  head) and sent as a small patch; at the top of the minute all 120 at once (one full flush).
+- The **text ring** no longer scrolls: it is drawn on full frames only (first frame, burn-in shift every
+  2 minutes). Scrolling it meant sending the whole ring every frame.
+- **Wi-Fi RSSI, link state, badge name** are read once a second instead of every frame - those calls go
+  through the Wi-Fi task and can wait.
+- A frame slower than 120 ms is logged at once: `clock  : slow frame N ms = restore / sweep+ring+bars /
+  text+time / flush`.
+- Build: **2,958,379 bytes** (62%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
