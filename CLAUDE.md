@@ -18,7 +18,7 @@ Private details (broker host, LAN IPs, what is set up where) are in `NOTES_local
   SensorQMI8658), TJpg_Decoder. MP3 = vendored Helix decoder in `Badge/src/helix`; MQTT = esp-mqtt
   (built into the core) wrapped in `Badge/src/sosnet.cpp`.
 - Host tests: `tools/test_adsbparse.c` (radar JSON parser) - run it after touching `Badge/src/adsbparse.c`.
-- After a change: build, check flash use (~66% now), bump the version string in `Badge.ino` setup(),
+- After a change: build, check flash use (~62% now), bump the version string in `Badge.ino` setup(),
   update `PROJECT.md` + add a `README.md` section.
 
 ## Code layout and rules

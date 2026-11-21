@@ -855,6 +855,30 @@ Hardware feedback on v3.27: the seconds were not smooth.
   so the next optimisation can aim at the real cost.
 - Build: **3,156,607 bytes** (66%).
 
+## v3.29 - clock face: cyberpunk radar HUD (replaces the steampunk watch)
+
+`preview_clock.png`, `preview_clock.gif`. The owner sent a reference picture of a green/amber HUD clock; it
+is rebuilt here as a live face (the picture itself has a fixed time, garbled text and a made-up IP in it).
+
+- **Static** (one 103 kB JPEG, `tools/make_clock_assets.py`): orange and green rings, a tick ring with
+  decorative arcs, a faint polar grid, minute numbers 60/5/.../55, scanlines.
+- **Every frame** (`Clock.ino`):
+  - radar sweep: green light *added* behind a beam turning every 6 s (90 degree trail), from a per-pixel
+    angle table built when the app opens - the grid and numbers shine through it;
+  - outer text ring scrolling round (22 px/s): SONS OF SUDO * SYS.LEVEL: ROOT * BGP PEERING: STABLE * the
+    Socrates quote in orange * IT IS ALWAYS DNS. A pre-rendered strip mapped onto the ring by a second table;
+  - seconds ring: 120 amber bars filling up through the minute, the newest four brightest;
+  - the time in Black Ops One stencil digits with a pre-rendered glow, added like light, fixed slots so
+    they do not jiggle;
+  - live HUD: SYSTEM STATUS SECURE / NO LINK (this badge's MQTT link, `sosLinkUp()`), SONS OF SUDO //
+    <badge name>, Wi-Fi RSSI, uptime, STARDATE yyyy.mm.dd + weekday, CET/CEST.
+- Fonts in `assets/fonts/` with their SIL OFL licences: Black Ops One (digits), Share Tech Mono (HUD, as
+  GFX fonts `HudSmall` / `HudMid`).
+- Kept from v3.28: adaptive frame pacing, burn-in shift, frame timing in the serial log (now background /
+  sweep+ring+bars / text+time / flush).
+- The steampunk face is gone (its source picture removed from the repo); it is in git history (v3.27-3.28).
+- Build: **2,957,715 bytes** (62%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

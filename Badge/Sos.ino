@@ -151,6 +151,7 @@ int sosOnlineCount() {
 
 // For the screensaver: is member i online (this badge counts while it is connected)?
 bool sosIsOnline(int i) { return i >= 0 && i < SOS_N && (sosOnline[i] || (i == sosMe && sosnet_connected())); }
+bool sosLinkUp() { return sosnet_connected(); }      // v3.29: this badge's own MQTT link (Clock HUD)
 // SLAP is just showing the victims (not armed, not showing a result).
 bool slapIdle() { return slapState == SLAP_PICK; }
 // For the market screensaver: slaps received / dealt by this badge, all time.
