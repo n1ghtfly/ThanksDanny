@@ -899,6 +899,23 @@ other work at the same moment (Wi-Fi, MQTT, a sync) showed as a hang.
   text+time / flush`.
 - Build: **2,958,379 bytes** (62%).
 
+## v3.31 - home screen: app grid instead of the carousel
+
+`preview_home_grid.png` (layout mock; the real icons are the existing ones). Owner feedback: sliding the
+carousel and opening an app (double tap on the middle icon) was hard and counter-intuitive.
+
+- **All 8 apps visible at once**, two rows of four under the Sons of Sudo sign, each with its name.
+  **One tap opens.** The app lights up the moment the finger lands (ring + white name, a small patch) and
+  opens on the lift; sliding more than 30 px away cancels.
+- Rows: PICTURES / ASK DANNY / RUMOURS / SETTINGS, then RADAR / ORACLE / CLOCK / SLAP (the bottom row is
+  narrower because the panel is round; the longest name sits in the top row). Every icon and label was
+  checked against the round mask with the real font; the boot layout check now checks the grid.
+- The wallpaper behind the grid is darkened to half brightness so the names read; the Wi-Fi / badge
+  network line stays underneath.
+- Removed: carousel slots and slide animation, page dots, name pill, the double-tap logic (v3.20), and
+  swipe detection (home was the only screen using it).
+- Build: **2,957,135 bytes** (62%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

@@ -126,9 +126,6 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 // Slot geometry, from far left (-2, off the glass) to far right (+2). The centre icon (R 60) sits
 // under the Sons of Sudo sign (its text ends at y~235, measured by tools/measure_wallpaper.py).
 // Every visible slot is checked against the round mask at boot.
-static const int SLOT_X[5] = { -40, 104, 233, 362, 506 };
-static const int SLOT_Y[5] = { 310, 296, 284, 296, 310 };   // v3.17: bigger icons, moved up to make room
-static const int SLOT_R[5] = {  24,  42,  70,  42,  24 };   //        (were 20 / 36 / 60)
 #define APP_COUNT   8
 #define APP_PICTURES 0
 #define APP_DECIDER  1
@@ -139,24 +136,22 @@ static const int SLOT_R[5] = {  24,  42,  70,  42,  24 };   //        (were 20 /
 #define APP_CLOCK    6                   // v3.27
 #define APP_SETTINGS 7
 static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS" };
-#define DOTS_Y      362                  // page dots, between the icon and the pill
-#define HPILL_X     118                  // home pill: app name + Wi-Fi line
-#define HPILL_Y     374
-#define HPILL_W     230
-#define HPILL_H     46
-#define SWIPE_PX    30                   // horizontal travel that makes a press a swipe (v3.16: was 45)
 #define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
-#define SWIPE_FRAMES 4                   // carousel slide frames (v3.16: was 5, now ~20 ms each)
-#define DBL_TAP_MS  450                  // v3.20: the second tap must land this soon after the first
-static uint32_t homeArmedAt = 0;         // v3.20: when the centre icon got its first tap (0 = not armed)
-static bool homeOnCentre(int x, int y) {
-  int cx = x - SLOT_X[2], cy = y - SLOT_Y[2];
-  return cx * cx + cy * cy <= (SLOT_R[2] + 18) * (SLOT_R[2] + 18);
-}
-#define ICONS_Y0    200                  // rows the sliding icons can touch (slot circles + focus ring)
-#define ICONS_Y1    355
-#define CAROUSEL_Y0 200                  // rows the carousel can touch: restored from the
-#define CAROUSEL_Y1 424                  //   wallpaper each animation frame
+
+// v3.31: the home screen is an APP GRID - every app visible, two rows of four with their names,
+// one tap opens it. (Until v3.30: a swipe carousel with a double tap to open - hard to use.)
+// The grid sits below the Sons of Sudo sign in the wallpaper (its text ends at y~235). The bottom
+// row is narrower because the panel is round; the longest name (SETTINGS) is in the top row.
+#define GRID_R      30                   // icon disc radius
+static const int GRID_X[2][4] = { { 73, 179, 287, 393 }, { 97, 188, 278, 369 } };
+static const int GRID_Y[2] = { 270, 352 };          // icon centres
+static const int GRID_APP[2][4] = { { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_SETTINGS },
+                                    { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SLAP } };
+#define GRID_LBL    34                   // label top, below the icon centre
+#define GRID_HIT    44                   // tap radius round an icon
+#define GRID_Y0     238                  // the darkened band behind the grid (wallpaper rows)
+#define GRID_Y1     420
+#define GRID_NET_Y  404                  // Wi-Fi / badge network line (top of capitals)
 
 // Bottom pill - the home status line and the "Back" buttons share it. Enlarged from 240x44 to
 // 280x62 with the text at size 2, because at size 1 the Wi-Fi address could not be read on the
@@ -199,7 +194,6 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_RADAR       11               // Radar.ino: live aircraft around you (v3.12)
 #define ST_ORACLE      12               // Oracle.ino: the network 8-ball (v3.18)
 #define ST_CLOCK       13               // Clock.ino: steampunk pocket watch (v3.27)
-static int homeApp = APP_PICTURES;      // which app is in the middle of the carousel
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 Arduino_CO5300  *panel = new Arduino_CO5300(bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
@@ -368,49 +362,19 @@ void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
   }
 }
 
-// Position of slot f (fractional, -2..2) by linear interpolation of the slot table.
-void slotAt(float f, int *x, int *y, int *r) {
-  if (f < -2) f = -2;
-  if (f > 2) f = 2;
-  int i = (int)floorf(f + 2.0f);
-  if (i > 3) i = 3;
-  float t = (f + 2.0f) - i;
-  *x = (int)(SLOT_X[i] + (SLOT_X[i + 1] - SLOT_X[i]) * t);
-  *y = (int)(SLOT_Y[i] + (SLOT_Y[i + 1] - SLOT_Y[i]) * t);
-  *r = (int)(SLOT_R[i] + (SLOT_R[i + 1] - SLOT_R[i]) * t);
-}
-
-// The carousel at offset `p` (0 = settled; 0..1 sliding to the next app, 0..-1 to the previous),
-// plus the dots and the pill. Draws into the canvas only.
-// v3.16: split in two so a slide frame only redraws (and sends) the icon strip; the dots and
-// the name pill are redrawn only on the frame where the app in the middle changes.
-void drawCarouselIcons(float p) {
-  // Far ones first, so the middle icon is drawn on top of anything it overlaps.
-  const int order[5] = { -2, 2, -1, 1, 0 };
-  for (int n = 0; n < 5; n++) {
-    int k = order[n];
-    int app = ((homeApp + k) % APP_COUNT + APP_COUNT) % APP_COUNT;
-    int x, y, r;
-    slotAt(k - p, &x, &y, &r);
-    bool focus = fabsf(k - p) < 0.5f;
-    drawAppIcon(app, x, y, r, focus);
+// The darkened band behind the grid: the wallpaper, at half brightness, so the names read.
+void gridBand() {
+  void wallpaperRows(int y0, int y1);            // Gallery.ino
+  wallpaperRows(GRID_Y0, GRID_Y1);
+  uint16_t *fb = gfx->getFramebuffer();
+  for (int y = GRID_Y0; y <= GRID_Y1; y++) {
+    uint16_t *row = fb + y * LCD_WIDTH;
+    for (int x = 0; x < LCD_WIDTH; x++) row[x] = (row[x] >> 1) & 0x7BEF;
   }
 }
 
-int carouselShown(float p) { return ((homeApp + (int)roundf(p)) % APP_COUNT + APP_COUNT) % APP_COUNT; }
-
-void drawCarouselInfo(float p) {
-  // Page dots: which of the apps is in the middle.
-  int shown = ((homeApp + (int)roundf(p)) % APP_COUNT + APP_COUNT) % APP_COUNT;
-  for (int i = 0; i < APP_COUNT; i++) {
-    int dx = 233 + (i - (APP_COUNT - 1) / 2.0f) * 16;
-    if (i == shown) gfx->fillCircle(dx, DOTS_Y, 4, RGB565(150, 230, 255));
-    else { gfx->fillCircle(dx, DOTS_Y, 3, RGB565(12, 12, 18)); gfx->drawCircle(dx, DOTS_Y, 3, RGB565(110, 140, 170)); }
-  }
-  // Name pill: the app in the middle, and the network state on a second line.
-  gfx->fillRoundRect(HPILL_X, HPILL_Y, HPILL_W, HPILL_H, 14, RGB565(10, 10, 14));
-  gfx->drawRoundRect(HPILL_X, HPILL_Y, HPILL_W, HPILL_H, 14, RGB565(70, 70, 86));
-  uiCentred(HPILL_Y + 6, APP_NAME[shown], &UiBig, RGB565_WHITE);
+// The Wi-Fi / badge network line under the grid.
+void gridNetLine() {
   char net[40];
   uint16_t nc;
   bool sosConfigured(); int sosOnlineCount(); bool sosnet_connected();
@@ -420,12 +384,38 @@ void drawCarouselInfo(float p) {
   else if (apRunning)                { snprintf(net, sizeof(net), "setup: join %s", AP_SSID); nc = RGB565(150, 220, 255); }
   else if (connecting)               { snprintf(net, sizeof(net), "wifi: connecting..."); nc = RGB565(255, 220, 120); }
   else                               { snprintf(net, sizeof(net), "wifi: not connected"); nc = RGB565(255, 200, 120); }
-  uiCentred(HPILL_Y + 29, net, &UiSmall, nc);
+  uiCentred(GRID_NET_Y, net, &UiSmall, nc);
 }
 
-void drawCarousel(float p) {
-  drawCarouselIcons(p);
-  drawCarouselInfo(p);
+// Centred label under an icon.
+static void gridLabel(int cx, int yTop, const char *s, uint16_t col) {
+  gfx->setFont(&UiSmall);
+  gfx->setTextSize(1);
+  int16_t x1, y1; uint16_t w, h;
+  gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
+  gfx->setTextColor(col);
+  gfx->setCursor(cx - (int)w / 2 - x1, yTop + uiCap(&UiSmall));
+  gfx->print(s);
+  gfx->setFont();
+}
+
+// One grid cell: icon + name. `lit` = a finger is on it.
+void gridCell(int r, int c, bool lit) {
+  int x = GRID_X[r][c], y = GRID_Y[r], app = GRID_APP[r][c];
+  drawAppIcon(app, x, y, GRID_R, lit);
+  if (lit) {
+    gfx->drawCircle(x, y, GRID_R + 3, RGB565_WHITE);
+    gfx->drawCircle(x, y, GRID_R + 4, RGB565_WHITE);
+    gfx->drawCircle(x, y, GRID_R + 5, RGB565(120, 200, 255));
+  }
+  gridLabel(x, y + GRID_LBL, APP_NAME[app], lit ? RGB565_WHITE : RGB565(200, 215, 230));
+}
+
+void drawGrid() {
+  gridBand();
+  for (int r = 0; r < 2; r++)
+    for (int c = 0; c < 4; c++) gridCell(r, c, false);
+  gridNetLine();
 }
 
 void drawHome() {
@@ -434,46 +424,26 @@ void drawHome() {
   gfx->fillScreen(RGB565_BLACK);
   void wallpaperBlit();
   wallpaperBlit();
-  drawCarousel(0);
-  Serial.printf("ui     : home - carousel on %s (swipe for more)\n", APP_NAME[homeApp]);
+  drawGrid();
+  Serial.println("ui     : home - app grid (tap an app to open it)");
 }
 
-// Slide the carousel one app left (dir +1) or right (dir -1). Each frame restores only the band
-// of wallpaper the carousel covers, redraws, and flushes.
-void homeSlide(int dir) {
-  void wallpaperRows(int y0, int y1);            // Gallery.ino
-  uint32_t t0 = millis();
-  int shownBefore = homeApp;
-  for (int f = 1; f <= SWIPE_FRAMES; f++) {
-    float t = (float)f / SWIPE_FRAMES;
-    float e = 1.0f - (1.0f - t) * (1.0f - t);     // ease out: quick start, gentle stop
-    float p = dir * e;
-    if (f == SWIPE_FRAMES) { homeApp = ((homeApp + dir) % APP_COUNT + APP_COUNT) % APP_COUNT; p = 0; }
-    wallpaperRows(ICONS_Y0, ICONS_Y1);
-    drawCarouselIcons(p);
-    int shown = carouselShown(p);
-    if (shown != shownBefore) {                    // the middle app changed: dots + name too
-      shownBefore = shown;
-      wallpaperRows(ICONS_Y1 + 1, CAROUSEL_Y1);
-      drawCarouselInfo(p);
-      flushRect(0, ICONS_Y0, LCD_WIDTH, CAROUSEL_Y1 - ICONS_Y0 + 1);
-    } else {
-      flushRect(0, ICONS_Y0, LCD_WIDTH, ICONS_Y1 - ICONS_Y0 + 1);   // just the icon strip
+// Which grid cell (row * 4 + col) a point is on, or -1.
+int gridHit(int x, int y) {
+  int best = -1, bd = GRID_HIT * GRID_HIT + 1;
+  for (int r = 0; r < 2; r++)
+    for (int c = 0; c < 4; c++) {
+      int dx = x - GRID_X[r][c], dy = y - GRID_Y[r] - 8;   // a little lower: the label is part of the target
+      int d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = r * 4 + c; }
     }
-  }
-  Serial.printf("ui     : carousel -> %s (%lu ms)\n", APP_NAME[homeApp], (unsigned long)(millis() - t0));
+  return best;
 }
 
 void openApp(int app) {
   Serial.printf("         -> opening %s\n", APP_NAME[app]);
   switch (app) {
-    case APP_PICTURES:
-      // The first JPEG decode takes ~300 ms: show the press first.
-      gfx->drawCircle(SLOT_X[2], SLOT_Y[2], SLOT_R[2] + 5, RGB565_WHITE);
-      gfx->drawCircle(SLOT_X[2], SLOT_Y[2], SLOT_R[2] + 6, RGB565(120, 200, 255));
-      flushRect(SLOT_X[2] - SLOT_R[2] - 8, SLOT_Y[2] - SLOT_R[2] - 8, 2 * SLOT_R[2] + 16, 2 * SLOT_R[2] + 16);
-      showScreen(ST_GALLERY);
-      break;
+    case APP_PICTURES: showScreen(ST_GALLERY); break;   // the press highlight is already on the glass
     case APP_DECIDER:  showScreen(ST_DECIDER); break;
     case APP_RUMOURS:  showScreen(ST_RUMOURS); break;
     case APP_SLAP:     { extern int slapState; slapState = 0; showScreen(ST_SLAP); } break;
@@ -484,44 +454,27 @@ void openApp(int app) {
   }
 }
 
-// Which carousel slot (1 left, 2 middle, 3 right) a point is on, or 0.
-int homeSlotAt(int x, int y) {
-  for (int i = 1; i <= 3; i++) {
-    int dx = x - SLOT_X[i], dy = y - SLOT_Y[i], r = SLOT_R[i] + (i == 2 ? 18 : 16);
-    if (dx * dx + dy * dy <= r * r) return i;
-  }
-  return 0;
-}
-
-// The moment a finger lands on a home icon it lights up - a ring and a brighter disc edge,
-// flushed as a small patch (~5 ms). The action itself waits for the lift, because the same press
-// may still turn into a swipe; the highlight is what makes that wait feel like nothing.
-static int homePressed = 0;
+// The moment a finger lands on an app it lights up (ring + white name), sent as a small patch
+// (~5 ms). It opens when the finger lifts on it; a finger that slides away cancels.
+static int homePressed = -1;               // grid cell under the finger, or -1
 void homePressFeedback(int x, int y) {
-  int i = homeSlotAt(x, y);
-  if (!i) return;
+  int i = gridHit(x, y);
+  if (i < 0) return;
   homePressed = i;
-  int r = SLOT_R[i];
-  gfx->drawCircle(SLOT_X[i], SLOT_Y[i], r + 4, RGB565_WHITE);
-  gfx->drawCircle(SLOT_X[i], SLOT_Y[i], r + 5, RGB565_WHITE);
-  gfx->drawCircle(SLOT_X[i], SLOT_Y[i], r + 6, RGB565(120, 200, 255));
-  flushRect(SLOT_X[i] - r - 8, SLOT_Y[i] - r - 8, 2 * r + 16, 2 * r + 16);
+  int r = i / 4, c = i % 4;
+  gridCell(r, c, true);
+  int x0 = GRID_X[r][c] - GRID_R - 46, y0 = GRID_Y[r] - GRID_R - 6;
+  flushRect(x0, y0, 2 * (GRID_R + 46), 2 * GRID_R + GRID_LBL + 20);
 }
 
-// Take the highlight off again (a press that became a drag): redraw the carousel band.
+// Take the highlight off again: redraw that cell over the band and send it.
 void homePressClear() {
-  if (!homePressed) return;
-  homePressed = 0;
-  void wallpaperRows(int y0, int y1);
-  wallpaperRows(CAROUSEL_Y0, CAROUSEL_Y1);
-  drawCarousel(0);
-  flushRect(0, CAROUSEL_Y0, LCD_WIDTH, CAROUSEL_Y1 - CAROUSEL_Y0 + 1);
-}
-
-// A horizontal swipe. Only the home screen uses it for now.
-void handleSwipe(int dir) {
-  Serial.printf("swipe  : %s on screen %d\n", dir > 0 ? "left (next)" : "right (previous)", screen);
-  if (screen == ST_HOME) { homePressed = 0; homeArmedAt = 0; homeSlide(dir); }   // the slide redraws the band
+  if (homePressed < 0) return;
+  int r = homePressed / 4, c = homePressed % 4;
+  homePressed = -1;
+  drawGrid();                                    // the band is a few ms: simplest to redraw it whole
+  int x0 = GRID_X[r][c] - GRID_R - 46, y0 = GRID_Y[r] - GRID_R - 6;
+  flushRect(x0, y0, 2 * (GRID_R + 46), 2 * GRID_R + GRID_LBL + 20);
 }
 
 void drawMenu() {
@@ -822,20 +775,10 @@ void handleTap(int16_t x, int16_t y) {
   }
 
   if (screen == ST_HOME) {
-    // Generous targets: the middle icon opens, a side icon brings that app to the middle.
-    // v3.20: the first tap on the middle icon only arms it (the highlight ring stays on); the
-    // second tap opens it - that one is caught on the press in pollTouch(), not here.
-    int lx = x - SLOT_X[1], ly = y - SLOT_Y[1];
-    int rx = x - SLOT_X[3], ry = y - SLOT_Y[3];
-    homeArmedAt = 0;                                             // any other tap disarms
-    if (homeOnCentre(x, y)) {
-      homeArmedAt = millis(); if (!homeArmedAt) homeArmedAt = 1;
-      homePressed = 2;                                           // keep the ring; cleared on timeout
-      Serial.println("         -> (home: armed - tap again to open)");
-    }
-    else if (lx * lx + ly * ly <= (SLOT_R[1] + 16) * (SLOT_R[1] + 16)) homeSlide(-1);
-    else if (rx * rx + ry * ry <= (SLOT_R[3] + 16) * (SLOT_R[3] + 16)) homeSlide(+1);
-    else Serial.println("         -> (home: not on an icon - swipe left/right to change app)");
+    // v3.31: one tap on an app opens it (the press already lit it up).
+    int i = gridHit(x, y);
+    if (i >= 0) openApp(GRID_APP[i / 4][i % 4]);
+    else Serial.println("         -> (home: not on an app)");
     lastActMs = millis() - t0;
     return;
   }
@@ -964,10 +907,9 @@ bool bootButtonHit() {
 
 // Taps and swipes (v2.6).
 //
-// HOME (the carousel): a press becomes a SWIPE as soon as it has moved SWIPE_PX sideways (and
-// more sideways than up/down) - that fires mid-gesture. A press lifted without becoming a swipe
-// is a TAP at the point where it went down. The icon under the finger lights up the instant it
-// lands (homePressFeedback), so the wait for the lift is not felt.
+// HOME (the app grid, v3.31): the app under the finger lights up the instant it lands
+// (homePressFeedback) and opens when the finger LIFTS on it - so a finger can still slide away
+// to cancel (more than 30 px). No swipes any more.
 //
 // EVERY OTHER SCREEN has no swipe, so a tap fires on the PRESS, the instant the finger lands -
 // as it did before the carousel. That is most of the "sluggish" fix: v2.3 made every tap wait
@@ -999,14 +941,7 @@ void pollTouch() {
       tStartX = tLastX = xs[0];
       tStartY = tLastY = ys[0];
       tSwiped = false;
-      if (screen == ST_HOME && homeArmedAt && now - homeArmedAt <= DBL_TAP_MS && homeOnCentre(tStartX, tStartY)) {
-        tSwiped = true;                      // v3.20: double tap - open on the second press
-        homeArmedAt = 0;
-        homePressed = 0;
-        lastTap = now;
-        Serial.printf("tap    : double tap -> open %s\n", APP_NAME[homeApp]);
-        openApp(homeApp);
-      } else if (screen == ST_HOME) {
+      if (screen == ST_HOME) {
         homePressFeedback(tStartX, tStartY);
       } else if (now - lastTap > TAP_GUARD_MS) {
         tSwiped = true;                      // consumed: nothing more happens on the lift
@@ -1019,10 +954,10 @@ void pollTouch() {
     }
     tLastX = xs[0];
     tLastY = ys[0];
-    int dx = tLastX - tStartX, dy = tLastY - tStartY;
-    if (!tSwiped && screen == ST_HOME && abs(dx) >= SWIPE_PX && abs(dx) > abs(dy) * 13 / 10) {
-      tSwiped = true;
-      handleSwipe(dx < 0 ? +1 : -1);         // finger moving left = next app
+    // v3.31: no swipes any more. A finger that slides off the app it landed on cancels it.
+    if (screen == ST_HOME && homePressed >= 0) {
+      int mx = tLastX - tStartX, my = tLastY - tStartY;
+      if (mx * mx + my * my > 30 * 30) { homePressClear(); tSwiped = true; }
     }
     return;
   }
@@ -1038,7 +973,7 @@ void pollTouch() {
   }
   lastTap = now;
   uint32_t a0 = micros();
-  homePressed = 0;
+  homePressed = -1;
   handleTap(tStartX, tStartY);
   Serial.printf("         -> responded in %lu ms after a %lu ms press (read %lu us)\n",
                 (micros() - a0) / 1000, (unsigned long)(tLastSeen - tDownAt), lastReadUs);
@@ -1055,7 +990,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.30 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.31 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1072,12 +1007,12 @@ void setup() {
   // The cog is still used by the gallery; the carousel's three visible slots and its pill are new.
   bool cogOK  = true;                        // v2.7: no cog is drawn anywhere any more
   bool appsOK = true;
-  for (int i = 1; i <= 3; i++) appsOK = appsOK && circleInsidePanel(SLOT_X[i], SLOT_Y[i], SLOT_R[i] + 6);
-  bool hpillOK = rectInsidePanel(HPILL_X, HPILL_Y, HPILL_W, HPILL_H);
-  bool pillOK = rectInsidePanel(PILL_X, PILL_Y, PILL_W, PILL_H) && hpillOK;
+  for (int r = 0; r < 2; r++)
+    for (int c = 0; c < 4; c++) appsOK = appsOK && circleInsidePanel(GRID_X[r][c], GRID_Y[r], GRID_R + 6);
+  bool pillOK = rectInsidePanel(PILL_X, PILL_Y, PILL_W, PILL_H);
   bool rowsOK = rectInsidePanel(ROW_X, ROW_Y0, ROW_W, ROW_H) &&
                 rectInsidePanel(ROW_X, ROW_Y0 + (ROW_COUNT - 1) * (ROW_H + ROW_GAP), ROW_W, ROW_H);
-  Serial.printf("layout : app carousel %s | pills %s | rows %s\n",
+  Serial.printf("layout : app grid %s | pills %s | rows %s\n",
                 appsOK ? "yes" : "NO",
                 pillOK ? "yes" : "NO", rowsOK ? "yes" : "NO");
   if (!cogOK || !appsOK || !pillOK || !rowsOK) Serial.println("! a control sits outside the round aperture");
@@ -1188,11 +1123,6 @@ void loop() {
       startSetupAP();
       if (screen == ST_APINFO) showScreen(ST_APINFO);
     }
-  }
-  // v3.20: no second tap in time - take the highlight off the middle icon again.
-  if (homeArmedAt && millis() - homeArmedAt > DBL_TAP_MS && !touchDown) {
-    homeArmedAt = 0;
-    if (screen == ST_HOME) homePressClear(); else homePressed = 0;
   }
   if (screen == ST_RUMOURS && !saverActive()) { void rumoursTick(); rumoursTick(); }   // sound bars
   void sosPoll(); sosPoll();                                          // badge network: slaps, presence
