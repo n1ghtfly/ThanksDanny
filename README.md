@@ -936,6 +936,31 @@ sometimes nothing seemed to happen. And the grid could be a bit bigger.
   mask with the real font.
 - Build: **2,957,379 bytes** (62%).
 
+## v3.33 - Danny-gotchi
+
+`preview_gotchi.png`, `preview_gotchi_sheet.png`. A pixel-art Danny (24 x 26 sprite drawn 6x: brown hair,
+glasses, blue hoodie with a green `>_` prompt) who lives on the badge and needs looking after.
+
+- **Needs** (0-100, shown as bars): COFFEE -8/h, MOOD -5/h, ENERGY -4/h awake; asleep COFFEE -3/h, MOOD -2/h,
+  ENERGY +25/h (wakes up by himself when full). They run down in real time (internet time), also while the
+  app is closed or the badge is off - on opening, the time since the last visit is applied (max 72 h).
+- **Buttons**: COFFEE (+30; when already above 85 he gets WIRED, jittery and grumpy), THANKS (+25 mood,
+  hearts, a reply: "It was DNS, by the way."), SLEEP / WAKE. Waking him with coffee or thanks: grumpy.
+  Tap Danny: he waves. HOME pill as in Oracle.
+- **Badge life**: every slap received since the last look costs 6 mood and wakes him ("Ouch! Slapped 3
+  times!"); shaking the badge makes him dizzy ("Whoa... packet loss..."). Low needs blink red and he says
+  so ("Need... coffee..."); otherwise a rotating quip.
+- **KERNEL PANIC** when all three hit zero: grey Danny, red rack lights, uptime frozen; REBOOT starts a new
+  one. Uptime gives a title: INTERN, JUNIOR ENG, MEDIOR ENG, SENIOR ENG, PRINCIPAL, ROOT.
+- Retro square-wave beeps (made at start-up, played with `sosPlay` - the slap mute silences them).
+- State in NVS namespace `gotchi`, saved on every action and every 5 minutes. Scene redrawn ~10 fps as a
+  326 x 234 patch; the top bars only when they change (or blink).
+- **Home grid**: GOTCHI replaces SETTINGS in the top row (Danny's head as the icon, with a red dot when he
+  needs care); **SETTINGS is now a small gear** under the grid.
+- Pixel art: `tools/make_gotchi_assets.py` -> `Badge/gotchi_assets.h` (palette indices + RGB565 palette,
+  plus a grey palette for the crash).
+- Build: **2,971,559 bytes** (62%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

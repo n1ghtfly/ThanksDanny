@@ -126,7 +126,7 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 // Slot geometry, from far left (-2, off the glass) to far right (+2). The centre icon (R 60) sits
 // under the Sons of Sudo sign (its text ends at y~235, measured by tools/measure_wallpaper.py).
 // Every visible slot is checked against the round mask at boot.
-#define APP_COUNT   8
+#define APP_COUNT   9
 #define APP_PICTURES 0
 #define APP_DECIDER  1
 #define APP_RUMOURS  2
@@ -135,23 +135,28 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 #define APP_ORACLE   5                   // v3.18
 #define APP_CLOCK    6                   // v3.27
 #define APP_SETTINGS 7
-static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS" };
+#define APP_GOTCHI   8                   // v3.33
+static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS", "GOTCHI" };
 #define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
 
 // v3.31: the home screen is an APP GRID - every app visible, two rows of four with their names,
 // one tap opens it. (Until v3.30: a swipe carousel with a double tap to open - hard to use.)
 // The grid sits below the Sons of Sudo sign in the wallpaper (its text ends at y~235). The bottom
-// row is narrower because the panel is round; the longest name (SETTINGS) is in the top row.
+// row is narrower because the panel is round; the longest names are in the top row.
+// v3.33: SETTINGS moved out of the grid to a small gear under it, to make room for GOTCHI.
 #define GRID_R      32                   // icon disc radius (v3.32: was 30)
 static const int GRID_X[2][4] = { { 73, 179, 287, 393 }, { 103, 189, 277, 363 } };
 static const int GRID_Y[2] = { 270, 355 };          // icon centres
-static const int GRID_APP[2][4] = { { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_SETTINGS },
+static const int GRID_APP[2][4] = { { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_GOTCHI },
                                     { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SLAP } };
 #define GRID_LBL    36                   // label top, below the icon centre
 #define GRID_HIT    46                   // tap radius round an icon
 #define GRID_Y0     238                  // the darkened band behind the grid (wallpaper rows)
-#define GRID_Y1     424
+#define GRID_Y1     424                  // (the gear sits below the band)
 #define GRID_NET_Y  408                  // Wi-Fi / badge network line (top of capitals)
+#define GEAR_X      233                  // v3.33: Settings, a small gear under the grid
+#define GEAR_Y      442
+#define GEAR_R      14
 
 // Bottom pill - the home status line and the "Back" buttons share it. Enlarged from 240x44 to
 // 280x62 with the text at size 2, because at size 1 the Wi-Fi address could not be read on the
@@ -193,7 +198,8 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_VOTE        10               // Vote.ino: a question from the poll website (v3.9)
 #define ST_RADAR       11               // Radar.ino: live aircraft around you (v3.12)
 #define ST_ORACLE      12               // Oracle.ino: the network 8-ball (v3.18)
-#define ST_CLOCK       13               // Clock.ino: steampunk pocket watch (v3.27)
+#define ST_CLOCK       13               // Clock.ino: HUD clock (v3.27)
+#define ST_GOTCHI      14               // Gotchi.ino: Danny-gotchi (v3.33)
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 Arduino_CO5300  *panel = new Arduino_CO5300(bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
@@ -358,6 +364,7 @@ void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
     case APP_RADAR:    drawRadarIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));   break;
     case APP_ORACLE:   drawOracleIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));  break;
     case APP_CLOCK:    drawClockIcon(cx, cy, (R * 62) / 100, fg, RGB565(12, 12, 18));   break;
+    case APP_GOTCHI:   drawGotchiIcon(cx, cy, R);                                         break;
     case APP_SETTINGS: drawCog(cx, cy, (R * 52) / 100, fg, RGB565(12, 12, 18));        break;
   }
 }
@@ -416,6 +423,9 @@ void drawGrid() {
   for (int r = 0; r < 2; r++)
     for (int c = 0; c < 4; c++) gridCell(r, c, false);
   gridNetLine();
+  gfx->fillCircle(GEAR_X, GEAR_Y, GEAR_R + 3, RGB565(12, 12, 18));   // Settings
+  gfx->drawCircle(GEAR_X, GEAR_Y, GEAR_R + 3, RGB565(70, 96, 130));
+  drawCog(GEAR_X, GEAR_Y, GEAR_R - 2, RGB565(170, 190, 215), RGB565(12, 12, 18));
 }
 
 void drawHome() {
@@ -450,6 +460,7 @@ void openApp(int app) {
     case APP_RADAR:    showScreen(ST_RADAR);   break;
     case APP_ORACLE:   showScreen(ST_ORACLE);  break;
     case APP_CLOCK:    showScreen(ST_CLOCK);   break;
+    case APP_GOTCHI:   showScreen(ST_GOTCHI);  break;
     case APP_SETTINGS: showScreen(ST_MENU);    break;
   }
 }
@@ -592,6 +603,7 @@ void showScreen(int s) {
     case ST_RADAR:        showRadar();        return;  // Radar.ino; redrawn by radarTick()
     case ST_ORACLE:       showOracle();       return;  // Oracle.ino
     case ST_CLOCK:        showClock();        return;  // Clock.ino; redrawn by clockTick()
+    case ST_GOTCHI:       showGotchi();       return;  // Gotchi.ino; animated by gotchiTick()
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -776,8 +788,10 @@ void handleTap(int16_t x, int16_t y) {
 
   if (screen == ST_HOME) {
     // v3.31: one tap on an app opens it (the press already lit it up).
+    int gx = x - GEAR_X, gy = y - GEAR_Y;
     int i = gridHit(x, y);
-    if (i >= 0) openApp(GRID_APP[i / 4][i % 4]);
+    if (gx * gx + gy * gy <= 26 * 26) openApp(APP_SETTINGS);     // the gear under the grid
+    else if (i >= 0) openApp(GRID_APP[i / 4][i % 4]);
     else Serial.println("         -> (home: not on an app)");
     lastActMs = millis() - t0;
     return;
@@ -844,6 +858,7 @@ void handleTap(int16_t x, int16_t y) {
   if (screen == ST_RADAR)   { radarTap(x, y);   lastActMs = millis() - t0; return; }
   if (screen == ST_ORACLE)  { oracleTap(x, y);  lastActMs = millis() - t0; return; }
   if (screen == ST_CLOCK)   { clockTap(x, y);   lastActMs = millis() - t0; return; }
+  if (screen == ST_GOTCHI)  { gotchiTap(x, y);  lastActMs = millis() - t0; return; }
 
   if (screen == ST_RUMOURS) {
     void rumoursTap(int x, int y);            // Rumours.ino
@@ -1013,7 +1028,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.32 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.33 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1032,6 +1047,7 @@ void setup() {
   bool appsOK = true;
   for (int r = 0; r < 2; r++)
     for (int c = 0; c < 4; c++) appsOK = appsOK && circleInsidePanel(GRID_X[r][c], GRID_Y[r], GRID_R + 6);
+  appsOK = appsOK && circleInsidePanel(GEAR_X, GEAR_Y, GEAR_R + 4);
   bool pillOK = rectInsidePanel(PILL_X, PILL_Y, PILL_W, PILL_H);
   bool rowsOK = rectInsidePanel(ROW_X, ROW_Y0, ROW_W, ROW_H) &&
                 rectInsidePanel(ROW_X, ROW_Y0 + (ROW_COUNT - 1) * (ROW_H + ROW_GAP), ROW_W, ROW_H);
@@ -1153,6 +1169,7 @@ void loop() {
   if (screen == ST_RADAR && !saverActive()) radarTick();             // aircraft glide, fresh data
   if (screen == ST_ORACLE && !saverActive()) oracleTick();           // a shake asks the oracle
   if (screen == ST_CLOCK && !saverActive()) clockTick();             // the watch ticks (v3.27)
+  if (screen == ST_GOTCHI && !saverActive()) gotchiTick();           // Danny-gotchi lives (v3.33)
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
   // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
   // printed just before it in the log show what was running.
