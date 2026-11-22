@@ -17,3 +17,4 @@ Thumbs.db
 # --- local badge settings (broker address): kept off GitHub ---
 Badge/sos_local.h
 NOTES_local.md
+__pycache__/
