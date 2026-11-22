@@ -916,6 +916,26 @@ carousel and opening an app (double tap on the middle icon) was hard and counter
   swipe detection (home was the only screen using it).
 - Build: **2,957,135 bytes** (62%).
 
+## v3.32 - apps opening and closing again; grid 5% bigger
+
+Owner feedback: some apps (the clock) were hard to start - sometimes it opened and closed again,
+sometimes nothing seemed to happen. And the grid could be a bit bigger.
+
+- **Cause**: a finger counts as lifted after `RELEASE_MS` (35 ms) without a touch report. While the badge
+  is busy (drawing a clock frame, or an app loading for a few hundred ms) nobody polls the touch chip, and
+  the CST9217 only reports when it has new data, so the first reads after such a gap are empty. That gap
+  counted as a lift: one press became two. The first opened the app (on the lift); the second landed on
+  the new screen, where a tap fires on the press - on the clock that means "home". If the app took long to
+  load, all of this happened before it was ever shown: "nothing happened". Simulated: old code splits a
+  press held across a 300 ms load into down/lift/down/lift; fixed code keeps it one press.
+- **Fix**: only time actually spent polling counts toward a lift (`tLastSeen` moves forward by the blind
+  gap). Plus: a press within `NEW_SCREEN_MS` (300 ms) after a tap changed the screen is ignored (logged as
+  `same finger, ignored`), and the tap guard now starts when the tapped action has finished
+  (`tapAndNote()`), not before a slow app load.
+- **Grid**: icons r 30 -> 32, tap radius 44 -> 46, rows and labels moved to fit; checked against the round
+  mask with the real font.
+- Build: **2,957,379 bytes** (62%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

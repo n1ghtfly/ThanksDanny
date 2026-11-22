@@ -142,16 +142,16 @@ static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "
 // one tap opens it. (Until v3.30: a swipe carousel with a double tap to open - hard to use.)
 // The grid sits below the Sons of Sudo sign in the wallpaper (its text ends at y~235). The bottom
 // row is narrower because the panel is round; the longest name (SETTINGS) is in the top row.
-#define GRID_R      30                   // icon disc radius
-static const int GRID_X[2][4] = { { 73, 179, 287, 393 }, { 97, 188, 278, 369 } };
-static const int GRID_Y[2] = { 270, 352 };          // icon centres
+#define GRID_R      32                   // icon disc radius (v3.32: was 30)
+static const int GRID_X[2][4] = { { 73, 179, 287, 393 }, { 103, 189, 277, 363 } };
+static const int GRID_Y[2] = { 270, 355 };          // icon centres
 static const int GRID_APP[2][4] = { { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_SETTINGS },
                                     { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SLAP } };
-#define GRID_LBL    34                   // label top, below the icon centre
-#define GRID_HIT    44                   // tap radius round an icon
+#define GRID_LBL    36                   // label top, below the icon centre
+#define GRID_HIT    46                   // tap radius round an icon
 #define GRID_Y0     238                  // the darkened band behind the grid (wallpaper rows)
-#define GRID_Y1     420
-#define GRID_NET_Y  404                  // Wi-Fi / badge network line (top of capitals)
+#define GRID_Y1     424
+#define GRID_NET_Y  408                  // Wi-Fi / badge network line (top of capitals)
 
 // Bottom pill - the home status line and the "Back" buttons share it. Enlarged from 240x44 to
 // 280x62 with the text at size 2, because at size 1 the Wi-Fi address could not be read on the
@@ -464,7 +464,7 @@ void homePressFeedback(int x, int y) {
   int r = i / 4, c = i % 4;
   gridCell(r, c, true);
   int x0 = GRID_X[r][c] - GRID_R - 46, y0 = GRID_Y[r] - GRID_R - 6;
-  flushRect(x0, y0, 2 * (GRID_R + 46), 2 * GRID_R + GRID_LBL + 20);
+  flushRect(x0, y0, 2 * (GRID_R + 46), GRID_R + GRID_LBL + 24);
 }
 
 // Take the highlight off again: redraw that cell over the band and send it.
@@ -923,6 +923,18 @@ bool bootButtonHit() {
 static int16_t tStartX = 0, tStartY = 0, tLastX = 0, tLastY = 0;
 static bool    tSwiped = false;              // this press is used up (swiped, or tapped on press)
 static uint32_t tLastSeen = 0, tDownAt = 0;
+static uint32_t tLastPoll = 0;               // v3.32: when pollTouch() last ran
+static uint32_t tScreenAt = 0;               // v3.32: when a tap last changed the screen
+#define NEW_SCREEN_MS 300                    // a press this soon after = the same finger, ignore it
+
+// Run handleTap() and note when it is done: an app can take a few hundred ms to open (the clock
+// decodes its background), and the next tap must be measured from when it is on the glass.
+static void tapAndNote(int x, int y) {
+  int before = screen;
+  handleTap(x, y);
+  lastTap = millis();
+  if (screen != before) tScreenAt = lastTap;
+}
 
 void pollTouch() {
   if (!touchOK) return;
@@ -931,6 +943,14 @@ void pollTouch() {
   uint8_t n = touch.getPoint(xs, ys, 1);
   lastReadUs = micros() - r0;
   uint32_t now = millis();
+  // v3.32: a finger is "lifted" after RELEASE_MS of empty reads - but only reads we actually did.
+  // While a frame was being drawn or an app was loading nobody looked, and that gap used to count
+  // as a lift: one long press became two taps (the clock opened, then the "second tap" closed it).
+  // So the blind time is not counted: the "last seen" moment moves forward by it. (Not reset to now:
+  // the clock is blind ~30 of every 50 ms, and a full reset would never let a lift through.)
+  uint32_t gap = now - tLastPoll;
+  if (touchDown && gap > 2 * POLL_MS + 4) tLastSeen += gap - POLL_MS;
+  tLastPoll = now;
 
   if (n > 0) {
     tLastSeen = now;
@@ -941,13 +961,16 @@ void pollTouch() {
       tStartX = tLastX = xs[0];
       tStartY = tLastY = ys[0];
       tSwiped = false;
-      if (screen == ST_HOME) {
+      if (now - tScreenAt < NEW_SCREEN_MS) {   // v3.32: still the finger that opened this screen
+        tSwiped = true;
+        Serial.printf("touch  : press %lu ms after a screen change - same finger, ignored\n", (unsigned long)(now - tScreenAt));
+      } else if (screen == ST_HOME) {
         homePressFeedback(tStartX, tStartY);
       } else if (now - lastTap > TAP_GUARD_MS) {
         tSwiped = true;                      // consumed: nothing more happens on the lift
         lastTap = now;
         uint32_t a0 = micros();
-        handleTap(tStartX, tStartY);
+        tapAndNote(tStartX, tStartY);
         Serial.printf("         -> responded in %lu ms on press (read %lu us)\n", (micros() - a0) / 1000, lastReadUs);
       }
       return;
@@ -974,7 +997,7 @@ void pollTouch() {
   lastTap = now;
   uint32_t a0 = micros();
   homePressed = -1;
-  handleTap(tStartX, tStartY);
+  tapAndNote(tStartX, tStartY);
   Serial.printf("         -> responded in %lu ms after a %lu ms press (read %lu us)\n",
                 (micros() - a0) / 1000, (unsigned long)(tLastSeen - tDownAt), lastReadUs);
 }
@@ -990,7 +1013,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.31 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.32 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
