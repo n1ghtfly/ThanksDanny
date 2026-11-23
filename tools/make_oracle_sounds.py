@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Oracle 8-ball sounds (v3.34) -> Badge/oracle_sounds.h   (16 kHz mono int16, played with sosPlay)
+"""Oracle 8-ball sounds (v3.34, v3.35 brighter and louder) -> Badge/oracle_sounds.h   (16 kHz mono int16, played with sosPlay)
 
     python tools/make_oracle_sounds.py          # writes the header
     python tools/make_oracle_sounds.py --wav    # also writes oracle_swirl.wav / oracle_reveal.wav to listen to
@@ -30,7 +30,8 @@ def swirl(dur=1.45):
     x = t / dur
     # liquid: noise through a one-pole low-pass whose cutoff rises and falls with the swirl
     noise = rng.standard_normal(n)
-    cutoff = 250 + 1400 * np.sin(np.pi * x) ** 1.5                 # Hz
+    cutoff = 900 + 2600 * np.sin(np.pi * x) ** 1.5                 # Hz (v3.35: brighter - the badge speaker
+                                                                    # is tiny and does little below ~800 Hz)
     a = np.exp(-2 * np.pi * cutoff / RATE)
     y = np.zeros(n)
     acc = 0.0
@@ -43,7 +44,7 @@ def swirl(dur=1.45):
     bub = np.zeros(n)
     tt = 0.03
     while tt < dur - 0.08:
-        f0 = rng.uniform(350, 800)
+        f0 = rng.uniform(900, 1700)
         L = int(rng.uniform(0.025, 0.06) * RATE)
         k = np.arange(L) / RATE
         f = f0 * (1 + 2.5 * k / (L / RATE))                         # glide up
@@ -53,8 +54,8 @@ def swirl(dur=1.45):
         bub[s:s + L] += np.sin(ph) * env * rng.uniform(0.4, 0.9)
         tt += rng.uniform(0.04, 0.13) * (1 + 1.5 * (tt / dur))     # fewer bubbles as it settles
     env = np.minimum(1, t / 0.08) * (1 - x) ** 0.7                  # fade in fast, out with the spin
-    out = (0.55 * liquid + 0.45 * bub) * env
-    return out
+    out = (0.45 * liquid + 0.55 * bub) * env
+    return np.tanh(2.2 * out / np.max(np.abs(out)))                # v3.35: compressed = louder
 
 
 def reveal(dur=1.7):
@@ -75,10 +76,10 @@ def reveal(dur=1.7):
     shimmer = np.sin(2 * np.pi * 3520 * t) * np.exp(-t / 0.5) * (0.5 + 0.5 * np.sin(2 * np.pi * 9 * t)) * 0.12
     out += shimmer
     out *= np.minimum(1, (dur - t) / 0.15)                          # no click at the end
-    return out
+    return np.tanh(1.6 * out / np.max(np.abs(out)))                 # v3.35: compressed = louder
 
 
-def to_i16(x, peak=0.85):
+def to_i16(x, peak=0.92):
     x = x / np.max(np.abs(x)) * peak
     return np.round(x * 32767).astype(np.int16)
 

@@ -211,7 +211,11 @@ void sosSwish(int gain) { sosPlay(SND_SWISH, SND_SWISH_LEN, gain); }   // for ot
 bool sosSoundBusy() { return sosSndBusy; }       // v3.34: lets the Oracle wait for the swirl to end
 
 void sosPlay(const int16_t *pcm, int len, int gain) {
-  if (sosMuted || sosSndBusy || !decAudioInit()) return;
+  // v3.35: say why a sound did not play - "I hear nothing" is otherwise impossible to tell apart
+  if (sosMuted)        { Serial.println("sound  : skipped - Sounds are OFF in Settings"); return; }
+  if (sosSndBusy)      { Serial.println("sound  : skipped - another sound is still playing"); return; }
+  if (!decAudioInit()) { Serial.println("sound  : skipped - no audio path (see the audio line at boot)"); return; }
+  Serial.printf("sound  : playing %.2f s, gain %d\n", len / 16000.0f, gain);
   decSoundStop();
   rumoursStop();
   sosSndPtr = pcm; sosSndLen = len; sosSndGain = gain;

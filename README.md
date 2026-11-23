@@ -977,6 +977,19 @@ Owner: "the eight ball is without sound?" - it only played the slap swish at 60%
   silenced all three, but was labelled "Slap sound".
 - Build: **3,072,371 bytes** (65%).
 
+## v3.35 - Oracle sounds audible; sound log
+
+Owner after v3.34: "not hear the sound".
+
+- The v3.34 swirl sat mostly below 1 kHz (low-pass noise 250-1650 Hz, bubbles 350-800 Hz) - the badge's
+  tiny speaker does very little down there. Now: noise 900-3500 Hz, bubbles 900-1700 Hz, and both sounds
+  soft-compressed (tanh) and normalised to 92%: RMS 4000/5100 -> ~8400 (+6 dB), 91% / 100% of the energy
+  above 800 Hz.
+- `sosPlay()` now logs every sound: `sound  : playing 1.45 s, gain 256`, or why it was skipped (Sounds OFF
+  in Settings / another sound still playing / no audio path). Same player as slaps, gotchi and the old
+  clap voice, so if those are heard, the Oracle is too - unless Settings says Sounds: OFF.
+- Build: **3,072,607 bytes** (65%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
