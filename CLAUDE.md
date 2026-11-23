@@ -18,14 +18,17 @@ Private details (broker host, LAN IPs, what is set up where) are in `NOTES_local
   SensorQMI8658), TJpg_Decoder. MP3 = vendored Helix decoder in `Badge/src/helix`; MQTT = esp-mqtt
   (built into the core) wrapped in `Badge/src/sosnet.cpp`.
 - Host tests: `tools/test_adsbparse.c` (radar JSON parser) - run it after touching `Badge/src/adsbparse.c`.
-- After a change: build, check flash use (~65% now), bump the version string in `Badge.ino` setup(),
+- After a change: build, check flash use (~70% now), bump the version string in `Badge.ino` setup(),
   update `PROJECT.md` + add a `README.md` section.
 
 ## Code layout and rules
 
 - `Badge/*.ino` are concatenated alphabetically after `Badge.ino` (Clock, Decider, Gallery, Gotchi, Nope, Oracle,
-  Radar, Rumours, Screensaver, Sos, Vote). A file can use *functions* from later files (Arduino auto-prototypes them)
+  Phone, Radar, Remote, Rumours, Screensaver, Sos, Vote). A file can use *functions* from later files (Arduino auto-prototypes them)
   but not *variables/macros* from later files. Keep function signatures to primitive types.
+- No raw string literals (`R"(...)"`) in an .ino: Arduino's prototype generator (ctags) then produces no
+  prototypes at all. Put big strings (HTML) in a header (see `remote_page.h`). Code that needs library
+  types in signatures (NimBLE) goes in `src/*.cpp` with a primitive API (see `src/phonelink.h`).
 - Screens are `ST_*` in `Badge.ino`; `showScreen()` draws, `handleTap()` routes taps.
   Everything draws into a PSRAM canvas; use `flushRect()` for partial updates (even coordinates).
 - The panel is ROUND: anything near the corners is invisible. Check positions against radius 233.

@@ -526,6 +526,17 @@ bool sosSlapWaiting() { return sosDrain(); }
 const char *sosMeId() { return sosMe >= 0 ? SOS_ID[sosMe] : ""; }   // for the network name
 const char *sosMeLabel() { return sosMe >= 0 ? SOS_NAME[sosMe] : "not chosen"; }
 bool sosIsMuted() { return sosMuted; }
+void sosSetMuted(bool m) { if (m != sosMuted) sosToggleMute(); }        // v3.38: remote page
+void sosPlaySlapSound() { sosPlay(SND_SLAP, SND_SLAP_LEN, 256); }       // v3.38: remote soundboard
+const char *sosNameOf(int i) { return i >= 0 && i < SOS_N ? SOS_NAME[i] : ""; }
+int sosMeIndex() { return sosMe; }
+// v3.38: slap a badge from the remote page (same as swinging the badge, strength 1..10).
+bool sosRemoteSlap(int target, int strength) {
+  if (target < 0 || target >= SOS_N || target == sosMe || !sosConfigured()) return false;
+  slapTarget = target;
+  slapSend(strength);
+  return true;
+}
 
 void sosCycleMe() {
   sosMe = (sosMe + 2) % (SOS_N + 1) - 1;          // -1 -> 0 -> 1 -> 2 -> -1 ...

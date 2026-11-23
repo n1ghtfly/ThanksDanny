@@ -142,7 +142,9 @@ void decCoin(int cx, int cy, int R, float theta) {
 #define AUD_DO   8
 #define AUD_DI   10
 #define AUD_PA   46                      // amplifier enable, HIGH = speaker live
-#define AUD_VOLUME 80                    // codec volume 0..100
+#define AUD_VOLUME 80                    // codec volume 0..100 (default; v3.38: adjustable, saved)
+static es8311_handle_t decCodec = nullptr;   // v3.38: kept for volume changes
+static int decVol = -1;                      // v3.38: current volume 0..100 (-1 = not loaded yet)
 
 static I2SClass decI2s;
 static int  audState = 0;                // 0 not tried, 1 ready, -1 failed (then stay silent)
@@ -164,6 +166,8 @@ bool decAudioInit() {
     return false;
   }
   es8311_handle_t codec = es8311_create(0, ES8311_ADDRRES_0);
+  decCodec = codec;
+  int vol = decGetVolume();
   es8311_clock_config_t clk = {};
   clk.mclk_from_mclk_pin = true;
   clk.mclk_frequency = DEC_SND_RATE * 256;
@@ -171,7 +175,7 @@ bool decAudioInit() {
   int got = 0;
   if (!codec || es8311_init(codec, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16) != ESP_OK ||
       es8311_sample_frequency_config(codec, clk.mclk_frequency, clk.sample_frequency) != ESP_OK ||
-      es8311_voice_volume_set(codec, AUD_VOLUME, &got) != ESP_OK) {
+      es8311_voice_volume_set(codec, vol, &got) != ESP_OK) {
     Serial.println("audio  : ES8311 setup failed - Decider stays silent");
     return false;
   }
@@ -201,6 +205,30 @@ void decSoundTask(void *arg) {
                 (unsigned long)(millis() - t0));
   sndBusy = false;
   vTaskDelete(nullptr);
+}
+
+// v3.38: speaker volume 0..100, saved in NVS ("audio"/"vol"), set from the remote page.
+int decGetVolume() {
+  if (decVol < 0) {
+    Preferences p;
+    p.begin("audio", true);
+    decVol = p.getInt("vol", AUD_VOLUME);
+    p.end();
+  }
+  return decVol;
+}
+
+void decSetVolume(int v) {
+  if (v < 0) v = 0;
+  if (v > 100) v = 100;
+  decVol = v;
+  int got = 0;
+  if (decCodec && audState > 0) es8311_voice_volume_set(decCodec, v, &got);
+  Preferences p;
+  p.begin("audio", false);
+  p.putInt("vol", v);
+  p.end();
+  Serial.printf("audio  : volume %d\n", v);
 }
 
 void decSoundStop() {

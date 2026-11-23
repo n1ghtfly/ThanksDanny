@@ -126,7 +126,7 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 // Slot geometry, from far left (-2, off the glass) to far right (+2). The centre icon (R 60) sits
 // under the Sons of Sudo sign (its text ends at y~235, measured by tools/measure_wallpaper.py).
 // Every visible slot is checked against the round mask at boot.
-#define APP_COUNT   9
+#define APP_COUNT   10
 #define APP_PICTURES 0
 #define APP_DECIDER  1
 #define APP_RUMOURS  2
@@ -136,7 +136,8 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 #define APP_CLOCK    6                   // v3.27
 #define APP_SETTINGS 7
 #define APP_GOTCHI   8                   // v3.33
-static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS", "GOTCHI" };
+#define APP_MUSIC    9                   // v3.38: Bluetooth media remote (Phone.ino)
+static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS", "GOTCHI", "MUSIC" };
 #define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
 
 // v3.31: the home screen is an APP GRID - one tap opens an app. (Until v3.30: a swipe carousel
@@ -152,7 +153,7 @@ static const int GRID_SX[GRID_SLOTS] = { 113, 233, 353, 178, 288 };
 static const int GRID_SY[GRID_SLOTS] = { 278, 278, 278, 380, 380 };
 static const int GRID_PAGE[GRID_PAGES][GRID_SLOTS] = {
   { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_GOTCHI, APP_SLAP },
-  { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SETTINGS, -1 } };
+  { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SETTINGS, APP_MUSIC } };
 #define GRID_LBL    (GRID_R + 6)         // label top, below the icon centre
 #define GRID_HIT    52                   // tap radius round an icon
 #define GRID_Y0     238                  // the darkened band behind the grid (wallpaper rows)
@@ -205,6 +206,8 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_ORACLE      12               // Oracle.ino: the network 8-ball (v3.18)
 #define ST_CLOCK       13               // Clock.ino: HUD clock (v3.27)
 #define ST_GOTCHI      14               // Gotchi.ino: Danny-gotchi (v3.33)
+#define ST_MUSIC       15               // Phone.ino: Bluetooth media remote (v3.38)
+#define ST_NOTIFY      16               // Phone.ino: an iPhone notification card (v3.38)
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 Arduino_CO5300  *panel = new Arduino_CO5300(bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
@@ -370,6 +373,7 @@ void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
     case APP_ORACLE:   drawOracleIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));  break;
     case APP_CLOCK:    drawClockIcon(cx, cy, (R * 62) / 100, fg, RGB565(12, 12, 18));   break;
     case APP_GOTCHI:   drawGotchiIcon(cx, cy, R);                                         break;
+    case APP_MUSIC:    drawMusicIcon(cx, cy, R, fg);                                      break;
     case APP_SETTINGS: drawCog(cx, cy, (R * 52) / 100, fg, RGB565(12, 12, 18));        break;
   }
 }
@@ -518,6 +522,7 @@ void openApp(int app) {
     case APP_ORACLE:   showScreen(ST_ORACLE);  break;
     case APP_CLOCK:    showScreen(ST_CLOCK);   break;
     case APP_GOTCHI:   showScreen(ST_GOTCHI);  break;
+    case APP_MUSIC:    showScreen(ST_MUSIC);   break;
     case APP_SETTINGS: showScreen(ST_MENU);    break;
   }
 }
@@ -659,6 +664,8 @@ void showScreen(int s) {
     case ST_ORACLE:       showOracle();       return;  // Oracle.ino
     case ST_CLOCK:        showClock();        return;  // Clock.ino; redrawn by clockTick()
     case ST_GOTCHI:       showGotchi();       return;  // Gotchi.ino; animated by gotchiTick()
+    case ST_MUSIC:        showMusic();        return;  // Phone.ino
+    case ST_NOTIFY:       showNotify();       return;  // Phone.ino
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -722,6 +729,7 @@ void webBegin() {
   server.on("/save", HTTP_POST, handleSave);
   server.on("/sos", HTTP_POST, []() { void sosHandleSave(); sosHandleSave(); });
   server.on("/radar", HTTP_POST, []() { radarHandleSave(); });
+  remoteRoutes();                              // v3.38: /remote, /api/state, /api/do (Remote.ino)
   server.onNotFound([]() { server.send(200, "text/html", buildPage()); });
   server.begin();
   webStarted = true;
@@ -747,6 +755,8 @@ String buildPage() {
                   "<title>Thanks Danny</title>"
                   "<body style='font-family:system-ui;background:#0e0e12;color:#eee;margin:0;padding:26px'>"
                   "<h2 style='margin:0 0 6px'>Thanks Danny</h2>"
+                  "<p><a href='/remote' style='display:block;text-align:center;padding:14px;border-radius:10px;"
+                  "background:#1d2338;color:#59f08a;font-weight:600;text-decoration:none'>Open the remote control &rarr;</a></p>"
                   "<p style='color:#9ab'>Pick your Wi-Fi, type its password, and the badge will "
                   "save it and connect. Nothing is sent anywhere else.</p>"
                   "<form method='POST' action='/save'>"
@@ -914,6 +924,8 @@ void handleTap(int16_t x, int16_t y) {
   if (screen == ST_ORACLE)  { oracleTap(x, y);  lastActMs = millis() - t0; return; }
   if (screen == ST_CLOCK)   { clockTap(x, y);   lastActMs = millis() - t0; return; }
   if (screen == ST_GOTCHI)  { gotchiTap(x, y);  lastActMs = millis() - t0; return; }
+  if (screen == ST_MUSIC)   { musicTap(x, y);   lastActMs = millis() - t0; return; }
+  if (screen == ST_NOTIFY)  { notifyTap(x, y);  lastActMs = millis() - t0; return; }
 
   if (screen == ST_RUMOURS) {
     void rumoursTap(int x, int y);            // Rumours.ino
@@ -1088,7 +1100,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.37 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.38 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1161,12 +1173,15 @@ void setup() {
   webBegin();                                  // v3.13: the setup page, on every network
   showScreen(ST_HOME);
   saverPoke();                                 // the idle clock starts at the home screen
+  phoneSetup();                                // v3.38: Bluetooth, if it was on (Phone.ino)
   Serial.printf("touch  : polled every %d ms, tap guard %d ms\n", POLL_MS, TAP_GUARD_MS);
   Serial.println("ready");
 }
 
 void loop() {
-  server.handleClient();               // only does anything while the setup AP is up
+  server.handleClient();               // setup page + remote page (v3.38)
+  remoteTick();                        // v3.38: a queued command from the remote page
+  phoneTick();                         // v3.38: MUSIC status, iPhone notifications (Phone.ino)
 
   if (saverActive()) {
     saverLoop();                       // Screensaver.ino: tap / BOOT / lift wakes it, clock ticks

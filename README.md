@@ -1013,6 +1013,46 @@ a bit bigger; if not enough room, use something like a next page".
 Owner: make the 8-ball volume lower. `ORA_VOL` in `Oracle.ino`: swirl gain 256 -> 120, reveal 230 -> 108
 (about half, -6.5 dB). Other sounds unchanged.
 
+## v3.38 - phone: remote page, Bluetooth media remote (MUSIC), iPhone notifications
+
+`preview_music_notify.png`. Three ways to link the badge to a phone:
+
+**1. Remote page** - `http://badge-<name>.local/remote` (or the badge's IP + `/remote`; the setup page links
+to it). Same Wi-Fi, no app, no password (like the setup page). Volume slider (codec 0-100, saved in NVS
+`audio/vol`, `decSetVolume()`), Sounds on/off, soundboard (slap, drum roll, Oracle chime, random rumour),
+open any app / home, ask the Oracle, slap another badge, Danny-gotchi coffee / thanks / sleep with his bars.
+`Remote.ino` + `remote_page.h`. JSON API: `GET /api/state`, `GET /api/do?...`. Volume and mute act at once;
+everything that draws or plays is queued and run by `remoteTick()` in loop() (so the 2 s Oracle animation
+never runs inside a web request). Tested in headless Chromium against a mock API: no JS errors, every
+button sends the right command. NOTE: the HTML lives in a header because Arduino's prototype generator
+(ctags) cannot read a raw string literal in an .ino - with it in Remote.ino no prototypes were generated
+at all and the whole sketch failed to compile.
+
+**2. MUSIC app** - the badge as a Bluetooth LE **media remote**: a HID device with one consumer-control
+report (next, previous, stop, play/pause, mute, volume up/down), so whatever app is playing on the phone
+reacts. Screen: big play/pause, previous / next, volume down / mute / up, live status ("pair "SoS DANNY"
+on your phone" / pairing / connected / notifications on), a Bluetooth on/off pill, HOME. Pairing is "just
+works" with bonding and Secure Connections; NimBLE keeps up to 3 bonds in NVS. Bluetooth stays OFF until
+MUSIC is opened once (NVS `phone/bt`), then starts at every boot. The ESP32-S3 has no Bluetooth Classic,
+so the badge cannot be a Bluetooth speaker for the phone.
+
+**3. iPhone notifications (ANCS)** - once a paired iPhone is connected and the link encrypted, the badge
+(peripheral) acts as GATT client on the same connection: discovers Apple's Notification Center Service,
+subscribes to Notification Source + Data Source, and for each new notification asks the Control Point for
+app id, title (40) and message (120). A full-screen card (app pill coloured by category, title, wrapped
+message; INCOMING CALL for calls), soft ping (start of the Oracle chime), 8 s (calls 15 s) or until tapped,
+then back to the previous screen. UTF-8 -> ASCII (accents dropped, curly quotes straightened, emoji
+skipped). App ids mapped to names for common apps. The advertisement solicits ANCS (AD 0x15). Android has
+no ANCS: media keys only.
+- The core's BLE library (NimBLE backend on the S3) is used for the HID part; its BLEClient refuses an
+  existing connection, so ANCS talks to the NimBLE host directly (`ble_gattc_*`) and watches GAP events
+  with `ble_gap_event_listener_register()`. All of it is `src/phonelink.cpp` with a primitive-typed API
+  (`src/phonelink.h`), so the .ino auto-prototypes never see NimBLE types. UI in `Phone.ino`.
+- Home grid page 2: RADAR, ORACLE, CLOCK / SETTINGS, MUSIC.
+- NOT TESTED ON HARDWARE (no phone here): the log prefix `phone` says what happens - Bluetooth on (+ free
+  internal RAM), connected, link encrypted, iPhone notifications on, each notification.
+- Build: **3,334,935 bytes** (70%; Bluetooth adds ~250 kB), static RAM 28%.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

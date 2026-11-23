@@ -224,6 +224,8 @@ void rumoursStop() {
   for (int i = 0; i < 100 && rumBusy; i++) delay(5);
 }
 
+int rumoursCount() { return rumCount; }          // v3.38: remote page soundboard
+
 bool rumoursPlay(int idx) {
   if (idx < 0 || !decAudioInit()) return false;
   decSoundStop();                       // never on top of the drum roll

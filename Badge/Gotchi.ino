@@ -353,22 +353,10 @@ static void gotWakeGrumpy() {
   gotBeepPlay(2);
 }
 
-void gotchiTap(int x, int y) {
-  if (y >= GOT_HOME_Y - 8 && x > 160 && x < 306) { gotSave(); showScreen(ST_HOME); return; }
+// The three buttons (0 COFFEE, 1 THANKS / REBOOT, 2 SLEEP / WAKE) - from the screen or the remote page.
+void gotchiAction(int b) {
+  gotUpdate();
   uint32_t m = millis();
-  int b = -1;
-  for (int i = 0; i < 3; i++) {
-    int dx = x - GOT_BTN_X[i], dy = y - GOT_BTN_Y;
-    if (dx * dx + dy * dy <= 40 * 40) b = i;
-  }
-  if (b < 0) {
-    if (y > GOT_SCENE_Y && y < GOT_SY + 160 && x > GOT_SX - 10 && x < GOT_SX + 154 && !gotDead && !gotAsleep) {
-      gotActFrame = GOT_HAPPY; gotActUntil = m + 1200;
-      gotSay("Hi! Need something?", 2000);
-      gotBeepPlay(1);
-    }
-    return;
-  }
   if (gotDead) {
     if (b == 1) {                              // REBOOT
       gotCoffee = gotMood = gotEnergy = 80;
@@ -377,7 +365,7 @@ void gotchiTap(int x, int y) {
       gotSay("Booting... Danny v2 online.", 4000);
       gotBeepPlay(1);
       gotSave();
-      showGotchi();
+      if (screen == ST_GOTCHI) showGotchi();
     }
     return;
   }
@@ -410,10 +398,37 @@ void gotchiTap(int x, int y) {
     gotBeepPlay(0);
   }
   gotSave();
-  gotTop();
-  gotButtons();
-  gotScene();
-  gfx->flush();
+  if (screen == ST_GOTCHI) {
+    gotTop();
+    gotButtons();
+    gotScene();
+    gfx->flush();
+  }
+}
+
+// For the remote page: the needs as whole numbers, and the state.
+void gotchiState(int *c, int *mo, int *e, bool *asleep, bool *dead) {
+  gotUpdate();
+  *c = (int)gotCoffee; *mo = (int)gotMood; *e = (int)gotEnergy; *asleep = gotAsleep; *dead = gotDead;
+}
+
+void gotchiTap(int x, int y) {
+  if (y >= GOT_HOME_Y - 8 && x > 160 && x < 306) { gotSave(); showScreen(ST_HOME); return; }
+  uint32_t m = millis();
+  int b = -1;
+  for (int i = 0; i < 3; i++) {
+    int dx = x - GOT_BTN_X[i], dy = y - GOT_BTN_Y;
+    if (dx * dx + dy * dy <= 40 * 40) b = i;
+  }
+  if (b < 0) {
+    if (y > GOT_SCENE_Y && y < GOT_SY + 160 && x > GOT_SX - 10 && x < GOT_SX + 154 && !gotDead && !gotAsleep) {
+      gotActFrame = GOT_HAPPY; gotActUntil = m + 1200;
+      gotSay("Hi! Need something?", 2000);
+      gotBeepPlay(1);
+    }
+    return;
+  }
+  gotchiAction(b);
 }
 
 // Home grid icon: Danny's head, with a red dot when he needs you.

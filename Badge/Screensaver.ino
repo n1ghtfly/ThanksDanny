@@ -58,7 +58,7 @@ static bool saverAllowed() {
   if (touchDown) return false;
   switch (screen) {
     case ST_HOME: case ST_MENU: case ST_GALLERY: case ST_DECIDER: case ST_SLAPPED: case ST_VOTE: case ST_ORACLE:
-    case ST_GOTCHI: return true;
+    case ST_GOTCHI: case ST_MUSIC: return true;
     case ST_RUMOURS: return !rumBusy;
     case ST_SLAP:    return slapIdle();
     default:         return false;
