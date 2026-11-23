@@ -253,7 +253,8 @@ static void oraAsk() {
   int pick;
   do { pick = esp_random() % ORA_N; } while (pick == oraLast && ORA_N > 1);
   oraLast = pick;
-  sosPlay(SND_ORA_SWIRL, SND_ORA_SWIRL_LEN, 256);                // v3.34: liquid swirl (Sos.ino, respects mute)
+#define ORA_VOL 120                                            // v3.37: half volume (256 = full)
+  sosPlay(SND_ORA_SWIRL, SND_ORA_SWIRL_LEN, ORA_VOL);            // v3.34: liquid swirl (Sos.ino, respects mute)
   uint32_t t0 = millis();
   int frames = 0;
   while (millis() - t0 < ORA_SPIN_MS) {
@@ -274,7 +275,7 @@ static void oraAsk() {
   oraNow = pick;
   // v3.34: the reveal chime - the swirl (1.45 s) normally ended already; give it 250 ms if not
   for (uint32_t w0 = millis(); sosSoundBusy() && millis() - w0 < 250; ) delay(5);
-  sosPlay(SND_ORA_REVEAL, SND_ORA_REVEAL_LEN, 230);
+  sosPlay(SND_ORA_REVEAL, SND_ORA_REVEAL_LEN, ORA_VOL * 9 / 10);
   // the window opens, the answer floats up and brightens
   for (int lvl = 0; lvl <= 4; lvl++) {
     oraFrame(oraSpin, 0, ORA_SAYS[pick], lvl, false, true);

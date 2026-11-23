@@ -1008,6 +1008,11 @@ a bit bigger; if not enough room, use something like a next page".
   layout check covers the slots and arrows.
 - Build: **3,075,295 bytes** (65%).
 
+## v3.37 - Oracle quieter
+
+Owner: make the 8-ball volume lower. `ORA_VOL` in `Oracle.ino`: swirl gain 256 -> 120, reveal 230 -> 108
+(about half, -6.5 dB). Other sounds unchanged.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
