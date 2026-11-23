@@ -42,12 +42,37 @@ static String phoneName() {
 }
 
 // setup(): start Bluetooth if it was on before.
+static void phoneMarkStarting(bool on) {
+  Preferences p;
+  p.begin("phone", false);
+  p.putBool("starting", on);
+  p.end();
+}
+
+static void phoneSaveWanted(bool on);
+
+// Start Bluetooth with the crash marker around it (see phoneSetup).
+static void phoneStart() {
+  phoneMarkStarting(true);
+  phoneBegin(phoneName().c_str());
+  phoneMarkStarting(false);
+}
+
 void phoneSetup() {
   Preferences p;
   p.begin("phone", true);
   phoneBtWanted = p.getBool("bt", false);
+  bool crashed = p.getBool("starting", false);
   p.end();
-  if (phoneBtWanted) phoneBegin(phoneName().c_str());
+  // v3.40 safety net: "starting" is set just before Bluetooth starts and cleared once it is up. Still set at
+  // boot = the last start crashed inside Bluetooth, so leave it off (no boot loop); MUSIC switches it on again.
+  if (phoneBtWanted && crashed) {
+    Serial.println("phone  : ! Bluetooth crashed at the last start - left off (open MUSIC to try again)");
+    phoneSaveWanted(false);
+    phoneMarkStarting(false);
+    return;
+  }
+  if (phoneBtWanted) phoneStart();
   else Serial.println("phone  : Bluetooth off (open MUSIC to switch it on)");
 }
 
@@ -132,7 +157,7 @@ static void musBtPill() {
 
 void showMusic() {
   if (!phoneBtWanted) { phoneSaveWanted(true); }
-  if (!phoneStarted()) phoneBegin(phoneName().c_str());
+  if (!phoneStarted()) phoneStart();
   else phoneAdvertise(true);
   gfx->fillScreen(RGB565(8, 10, 22));
   uiCentred(46, "MUSIC", &UiBig, RGB565(120, 240, 150));
@@ -173,7 +198,7 @@ void musicTap(int x, int y) {
       Serial.println("phone  : Bluetooth switched off (fully off after the next restart)");
     } else {
       phoneSaveWanted(true);
-      if (!phoneStarted()) phoneBegin(phoneName().c_str()); else phoneAdvertise(true);
+      if (!phoneStarted()) phoneStart(); else phoneAdvertise(true);
     }
     musBtPill(); musStatus();
     flushRect(0, 78, LCD_WIDTH, 40); flushRect(0, MUS_BT_Y - 2, LCD_WIDTH, 28);

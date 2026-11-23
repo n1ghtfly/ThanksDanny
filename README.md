@@ -1062,6 +1062,17 @@ HUD now shows the display name (it showed the id). The **id stays `claudio`**: M
 Checked: the 9-character name fits under its slap button and in the clock HUD; "CLAUD-I/O SLAPPED YOU!" uses
 the smaller size like other long lines. Build: 3,334,979 bytes (70%).
 
+## v3.40 - fix: boot loop when Bluetooth was on
+
+First run of v3.38+ on hardware: once MUSIC had been opened, every boot crashed right after the home screen
+(`LoadProhibited`, backtrace `phoneBegin` -> `BLEHIDDevice::manufacturer(String)` -> `BLECharacteristic::setValue`).
+In the core's BLE library `manufacturer()` *creates* the optional characteristic and `manufacturer(String)` only sets
+it - called alone it writes through a null pointer. Now `sHid->manufacturer()->setValue("Sons of Sudo")`.
+Safety net: NVS `phone`/`starting` is set just before Bluetooth starts and cleared once it is up; if it is still set
+at boot, the last start crashed inside Bluetooth, so it stays off (log line `phone  : ! Bluetooth crashed...`) and
+MUSIC switches it on again. A Bluetooth bug can no longer lock the badge in a boot loop.
+Build: 3,335,079 bytes (70%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

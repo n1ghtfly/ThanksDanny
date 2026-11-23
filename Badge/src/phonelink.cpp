@@ -308,7 +308,8 @@ void phoneBegin(const char *deviceName) {
   sServer->setCallbacks(new SrvCb());
   sHid = new BLEHIDDevice(sServer);
   sInput = sHid->inputReport(1);
-  sHid->manufacturer("Sons of Sudo");
+  sHid->manufacturer()->setValue("Sons of Sudo");     // v3.40: manufacturer() CREATES the characteristic;
+                                                    // manufacturer(String) on its own wrote through a null pointer
   sHid->pnp(0x02, 0xE502, 0xA111, 0x0210);
   sHid->hidInfo(0x00, 0x01);
   sHid->reportMap(REPORT_MAP, sizeof(REPORT_MAP));
