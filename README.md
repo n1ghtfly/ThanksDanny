@@ -990,6 +990,24 @@ Owner after v3.34: "not hear the sound".
   clap voice, so if those are heard, the Oracle is too - unless Settings says Sounds: OFF.
 - Build: **3,072,607 bytes** (65%).
 
+## v3.36 - home screen: bigger icons and names, two pages
+
+`preview_home_grid.png` (mock: letters stand in for the real icons). Owner: "text and icons on main screen
+a bit bigger; if not enough room, use something like a next page".
+
+- Icons r 32 -> **38** (+19%), names in the new **UiLabel** font (DejaVu Sans Bold, caps 11 instead of 9;
+  `tools/make_ui_fonts.py`, the other fonts byte-identical).
+- That no longer fits 8 apps under the sign, so the grid has **pages of 5**: three on top, two below (the
+  panel narrows at the bottom; a lone bottom app is centred). Page 1: PICTURES, ASK DANNY, RUMOURS / GOTCHI,
+  SLAP. Page 2: RADAR, ORACLE, CLOCK / SETTINGS - Settings is an ordinary app again (the v3.33 gear is gone).
+- Change page: the round **arrow** beside the bottom row, or a clear sideways **swipe** (> 50 px, mostly
+  horizontal). Page dots at the bottom. Opening an app is still one tap (lit on press, opens on lift).
+- The Wi-Fi / badge network line is now a **pill at the top** of the screen (no room under the grid);
+  in setup mode it reads "join ThanksDanny-setup".
+- All icons, names, arrows and the pill checked against the round mask with the real fonts; the boot
+  layout check covers the slots and arrows.
+- Build: **3,075,295 bytes** (65%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

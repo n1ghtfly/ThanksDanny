@@ -139,24 +139,29 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS", "GOTCHI" };
 #define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
 
-// v3.31: the home screen is an APP GRID - every app visible, two rows of four with their names,
-// one tap opens it. (Until v3.30: a swipe carousel with a double tap to open - hard to use.)
-// The grid sits below the Sons of Sudo sign in the wallpaper (its text ends at y~235). The bottom
-// row is narrower because the panel is round; the longest names are in the top row.
-// v3.33: SETTINGS moved out of the grid to a small gear under it, to make room for GOTCHI.
-#define GRID_R      32                   // icon disc radius (v3.32: was 30)
-static const int GRID_X[2][4] = { { 73, 179, 287, 393 }, { 103, 189, 277, 363 } };
-static const int GRID_Y[2] = { 270, 355 };          // icon centres
-static const int GRID_APP[2][4] = { { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_GOTCHI },
-                                    { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SLAP } };
-#define GRID_LBL    36                   // label top, below the icon centre
-#define GRID_HIT    46                   // tap radius round an icon
+// v3.31: the home screen is an APP GRID - one tap opens an app. (Until v3.30: a swipe carousel
+// with a double tap to open - hard to use.) It sits below the Sons of Sudo sign in the wallpaper (its
+// text ends at y~235).
+// v3.36: bigger icons (r 38) and names (UiLabel), so it takes PAGES: 5 apps a page, three on top and
+// two below (the round panel narrows at the bottom). Arrows beside the bottom row, a swipe, or the
+// page dots change page. The Wi-Fi / badge network line moved to a pill at the very top.
+#define GRID_R      38                   // icon disc radius (v3.32: 32, v3.36: 38)
+#define GRID_SLOTS  5
+#define GRID_PAGES  2
+static const int GRID_SX[GRID_SLOTS] = { 113, 233, 353, 178, 288 };
+static const int GRID_SY[GRID_SLOTS] = { 278, 278, 278, 380, 380 };
+static const int GRID_PAGE[GRID_PAGES][GRID_SLOTS] = {
+  { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_GOTCHI, APP_SLAP },
+  { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SETTINGS, -1 } };
+#define GRID_LBL    (GRID_R + 6)         // label top, below the icon centre
+#define GRID_HIT    52                   // tap radius round an icon
 #define GRID_Y0     238                  // the darkened band behind the grid (wallpaper rows)
-#define GRID_Y1     424                  // (the gear sits below the band)
-#define GRID_NET_Y  408                  // Wi-Fi / badge network line (top of capitals)
-#define GEAR_X      233                  // v3.33: Settings, a small gear under the grid
-#define GEAR_Y      442
-#define GEAR_R      14
+#define GRID_Y1     465
+#define GRID_ARROW_Y 380                 // page arrows, beside the bottom row
+static const int GRID_ARROW_X[2] = { 96, 370 };
+#define GRID_DOTS_Y 452
+#define NET_PILL_Y  30                   // Wi-Fi / badge network, top of the screen
+static int homePage = 0;
 
 // Bottom pill - the home status line and the "Back" buttons share it. Enlarged from 240x44 to
 // 280x62 with the text at size 2, because at size 1 the Wi-Fi address could not be read on the
@@ -380,7 +385,7 @@ void gridBand() {
   }
 }
 
-// The Wi-Fi / badge network line under the grid.
+// The Wi-Fi / badge network pill at the top of the screen (v3.36: was a line under the grid).
 void gridNetLine() {
   char net[40];
   uint16_t nc;
@@ -388,44 +393,75 @@ void gridNetLine() {
   if (WiFi.status() == WL_CONNECTED && sosConfigured() && sosnet_connected())
                                      { snprintf(net, sizeof(net), "wifi ok  -  sos %d/3 online", sosOnlineCount()); nc = RGB565(150, 240, 160); }
   else if (WiFi.status() == WL_CONNECTED) { snprintf(net, sizeof(net), "wifi %s", WiFi.localIP().toString().c_str()); nc = RGB565(150, 240, 160); }
-  else if (apRunning)                { snprintf(net, sizeof(net), "setup: join %s", AP_SSID); nc = RGB565(150, 220, 255); }
+  else if (apRunning)                { snprintf(net, sizeof(net), "join %s", AP_SSID); nc = RGB565(150, 220, 255); }
   else if (connecting)               { snprintf(net, sizeof(net), "wifi: connecting..."); nc = RGB565(255, 220, 120); }
   else                               { snprintf(net, sizeof(net), "wifi: not connected"); nc = RGB565(255, 200, 120); }
-  uiCentred(GRID_NET_Y, net, &UiSmall, nc);
+  gfx->setFont(&UiSmall);
+  int16_t x1, y1; uint16_t w, h;
+  gfx->getTextBounds(net, 0, 0, &x1, &y1, &w, &h);
+  gfx->setFont();
+  int pw = w + 20;
+  gfx->fillRoundRect(233 - pw / 2, NET_PILL_Y, pw, 19, 9, RGB565(6, 10, 24));
+  gfx->drawRoundRect(233 - pw / 2, NET_PILL_Y, pw, 19, 9, RGB565(50, 70, 100));
+  uiCentred(NET_PILL_Y + 5, net, &UiSmall, nc);
 }
 
 // Centred label under an icon.
 static void gridLabel(int cx, int yTop, const char *s, uint16_t col) {
-  gfx->setFont(&UiSmall);
+  gfx->setFont(&UiLabel);
   gfx->setTextSize(1);
   int16_t x1, y1; uint16_t w, h;
   gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
   gfx->setTextColor(col);
-  gfx->setCursor(cx - (int)w / 2 - x1, yTop + uiCap(&UiSmall));
+  gfx->setCursor(cx - (int)w / 2 - x1, yTop + uiCap(&UiLabel));
   gfx->print(s);
   gfx->setFont();
 }
 
-// One grid cell: icon + name. `lit` = a finger is on it.
-void gridCell(int r, int c, bool lit) {
-  int x = GRID_X[r][c], y = GRID_Y[r], app = GRID_APP[r][c];
+// Where a slot sits on the current page: a bottom row with only one app is centred.
+int gridX(int slot) {
+  if (slot == 3 && GRID_PAGE[homePage][4] < 0) return 233;
+  return GRID_SX[slot];
+}
+
+// One slot of the current page: icon + name. `lit` = a finger is on it.
+void gridCell(int slot, bool lit) {
+  int app = GRID_PAGE[homePage][slot];
+  if (app < 0) return;
+  int x = gridX(slot), y = GRID_SY[slot];
   drawAppIcon(app, x, y, GRID_R, lit);
   if (lit) {
     gfx->drawCircle(x, y, GRID_R + 3, RGB565_WHITE);
     gfx->drawCircle(x, y, GRID_R + 4, RGB565_WHITE);
     gfx->drawCircle(x, y, GRID_R + 5, RGB565(120, 200, 255));
   }
-  gridLabel(x, y + GRID_LBL, APP_NAME[app], lit ? RGB565_WHITE : RGB565(200, 215, 230));
+  gridLabel(x, y + GRID_LBL, APP_NAME[app], lit ? RGB565_WHITE : RGB565(210, 222, 236));
+}
+
+// Page arrows (only where there is a page to go to) and page dots.
+static void gridPager() {
+  for (int k = 0; k < 2; k++) {
+    bool has = k == 0 ? homePage > 0 : homePage < GRID_PAGES - 1;
+    if (!has) continue;
+    int x = GRID_ARROW_X[k], y = GRID_ARROW_Y, d = k == 0 ? -1 : 1;
+    gfx->fillCircle(x, y, 17, RGB565(12, 14, 24));
+    gfx->drawCircle(x, y, 17, RGB565(70, 96, 130));
+    for (int t = -1; t <= 1; t++) {                          // a fat chevron
+      gfx->drawLine(x - 4 * d + t, y - 8, x + 4 * d + t, y, RGB565(200, 220, 245));
+      gfx->drawLine(x + 4 * d + t, y, x - 4 * d + t, y + 8, RGB565(200, 220, 245));
+    }
+  }
+  for (int p = 0; p < GRID_PAGES; p++) {
+    int x = 233 + (p * 2 - (GRID_PAGES - 1)) * 9;
+    if (p == homePage) gfx->fillCircle(x, GRID_DOTS_Y, 4, RGB565_WHITE);
+    else gfx->drawCircle(x, GRID_DOTS_Y, 4, RGB565(150, 165, 185));
+  }
 }
 
 void drawGrid() {
   gridBand();
-  for (int r = 0; r < 2; r++)
-    for (int c = 0; c < 4; c++) gridCell(r, c, false);
-  gridNetLine();
-  gfx->fillCircle(GEAR_X, GEAR_Y, GEAR_R + 3, RGB565(12, 12, 18));   // Settings
-  gfx->drawCircle(GEAR_X, GEAR_Y, GEAR_R + 3, RGB565(70, 96, 130));
-  drawCog(GEAR_X, GEAR_Y, GEAR_R - 2, RGB565(170, 190, 215), RGB565(12, 12, 18));
+  for (int i = 0; i < GRID_SLOTS; i++) gridCell(i, false);
+  gridPager();
 }
 
 void drawHome() {
@@ -435,20 +471,41 @@ void drawHome() {
   void wallpaperBlit();
   wallpaperBlit();
   drawGrid();
-  Serial.println("ui     : home - app grid (tap an app to open it)");
+  gridNetLine();
+  Serial.printf("ui     : home - app grid page %d/%d (tap an app to open it)\n", homePage + 1, GRID_PAGES);
 }
 
-// Which grid cell (row * 4 + col) a point is on, or -1.
+// Go to another page (dir -1 / +1): redraw only the grid band.
+void homePageGo(int dir) {
+  int p = homePage + dir;
+  if (p < 0 || p >= GRID_PAGES) return;
+  homePage = p;
+  drawGrid();
+  flushRect(0, GRID_Y0, LCD_WIDTH, GRID_Y1 - GRID_Y0 + 1);
+  Serial.printf("ui     : home page %d/%d\n", homePage + 1, GRID_PAGES);
+}
+
+// Which slot of the current page a point is on, or -1.
 int gridHit(int x, int y) {
   int best = -1, bd = GRID_HIT * GRID_HIT + 1;
-  for (int r = 0; r < 2; r++)
-    for (int c = 0; c < 4; c++) {
-      int dx = x - GRID_X[r][c], dy = y - GRID_Y[r] - 8;   // a little lower: the label is part of the target
-      int d = dx * dx + dy * dy;
-      if (d < bd) { bd = d; best = r * 4 + c; }
-    }
+  for (int i = 0; i < GRID_SLOTS; i++) {
+    if (GRID_PAGE[homePage][i] < 0) continue;
+    int dx = x - gridX(i), dy = y - GRID_SY[i] - 10;      // a little lower: the label is part of the target
+    int d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
   return best;
 }
+
+// Which page arrow a point is on: -1 / +1, or 0.
+int gridArrowHit(int x, int y) {
+  for (int k = 0; k < 2; k++) {
+    int dx = x - GRID_ARROW_X[k], dy = y - GRID_ARROW_Y;
+    if (dx * dx + dy * dy <= 30 * 30) return k == 0 ? -1 : 1;
+  }
+  return 0;
+}
+
 
 void openApp(int app) {
   Serial.printf("         -> opening %s\n", APP_NAME[app]);
@@ -467,25 +524,23 @@ void openApp(int app) {
 
 // The moment a finger lands on an app it lights up (ring + white name), sent as a small patch
 // (~5 ms). It opens when the finger lifts on it; a finger that slides away cancels.
-static int homePressed = -1;               // grid cell under the finger, or -1
+static int homePressed = -1;               // slot under the finger, or -1
 void homePressFeedback(int x, int y) {
+  if (gridArrowHit(x, y)) return;
   int i = gridHit(x, y);
   if (i < 0) return;
   homePressed = i;
-  int r = i / 4, c = i % 4;
-  gridCell(r, c, true);
-  int x0 = GRID_X[r][c] - GRID_R - 46, y0 = GRID_Y[r] - GRID_R - 6;
-  flushRect(x0, y0, 2 * (GRID_R + 46), GRID_R + GRID_LBL + 24);
+  gridCell(i, true);
+  flushRect(gridX(i) - GRID_R - 52, GRID_SY[i] - GRID_R - 6, 2 * (GRID_R + 52), 2 * GRID_R + 30);
 }
 
-// Take the highlight off again: redraw that cell over the band and send it.
+// Take the highlight off again: redraw the band and send that cell.
 void homePressClear() {
   if (homePressed < 0) return;
-  int r = homePressed / 4, c = homePressed % 4;
+  int i = homePressed;
   homePressed = -1;
   drawGrid();                                    // the band is a few ms: simplest to redraw it whole
-  int x0 = GRID_X[r][c] - GRID_R - 46, y0 = GRID_Y[r] - GRID_R - 6;
-  flushRect(x0, y0, 2 * (GRID_R + 46), 2 * GRID_R + GRID_LBL + 20);
+  flushRect(gridX(i) - GRID_R - 52, GRID_SY[i] - GRID_R - 6, 2 * (GRID_R + 52), 2 * GRID_R + 30);
 }
 
 void drawMenu() {
@@ -788,10 +843,10 @@ void handleTap(int16_t x, int16_t y) {
 
   if (screen == ST_HOME) {
     // v3.31: one tap on an app opens it (the press already lit it up).
-    int gx = x - GEAR_X, gy = y - GEAR_Y;
+    int arrow = gridArrowHit(x, y);
     int i = gridHit(x, y);
-    if (gx * gx + gy * gy <= 26 * 26) openApp(APP_SETTINGS);     // the gear under the grid
-    else if (i >= 0) openApp(GRID_APP[i / 4][i % 4]);
+    if (arrow) homePageGo(arrow);                                 // v3.36: page arrows
+    else if (i >= 0) openApp(GRID_PAGE[homePage][i]);
     else Serial.println("         -> (home: not on an app)");
     lastActMs = millis() - t0;
     return;
@@ -992,10 +1047,15 @@ void pollTouch() {
     }
     tLastX = xs[0];
     tLastY = ys[0];
-    // v3.31: no swipes any more. A finger that slides off the app it landed on cancels it.
-    if (screen == ST_HOME && homePressed >= 0) {
+    // A finger that slides off the app it landed on cancels it. v3.36: a clear sideways swipe on
+    // the home screen turns the page.
+    if (screen == ST_HOME && !tSwiped) {
       int mx = tLastX - tStartX, my = tLastY - tStartY;
-      if (mx * mx + my * my > 30 * 30) { homePressClear(); tSwiped = true; }
+      if (abs(mx) > 50 && abs(mx) > 2 * abs(my)) {
+        homePressClear();
+        tSwiped = true;
+        homePageGo(mx < 0 ? 1 : -1);
+      } else if (homePressed >= 0 && mx * mx + my * my > 30 * 30) { homePressClear(); tSwiped = true; }
     }
     return;
   }
@@ -1028,7 +1088,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.35 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.36 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1045,9 +1105,8 @@ void setup() {
   // The cog is still used by the gallery; the carousel's three visible slots and its pill are new.
   bool cogOK  = true;                        // v2.7: no cog is drawn anywhere any more
   bool appsOK = true;
-  for (int r = 0; r < 2; r++)
-    for (int c = 0; c < 4; c++) appsOK = appsOK && circleInsidePanel(GRID_X[r][c], GRID_Y[r], GRID_R + 6);
-  appsOK = appsOK && circleInsidePanel(GEAR_X, GEAR_Y, GEAR_R + 4);
+  for (int i = 0; i < GRID_SLOTS; i++) appsOK = appsOK && circleInsidePanel(GRID_SX[i], GRID_SY[i], GRID_R + 6);
+  for (int k = 0; k < 2; k++) appsOK = appsOK && circleInsidePanel(GRID_ARROW_X[k], GRID_ARROW_Y, 18);
   bool pillOK = rectInsidePanel(PILL_X, PILL_Y, PILL_W, PILL_H);
   bool rowsOK = rectInsidePanel(ROW_X, ROW_Y0, ROW_W, ROW_H) &&
                 rectInsidePanel(ROW_X, ROW_Y0 + (ROW_COUNT - 1) * (ROW_H + ROW_GAP), ROW_W, ROW_H);

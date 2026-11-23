@@ -20,7 +20,8 @@ from PIL import ImageFont
 
 TTF = sys.argv[1] if len(sys.argv) > 1 else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 OUT = Path(__file__).resolve().parent.parent / "Badge" / "ui_fonts.h"
-FONTS = [("UiSmall", 9), ("UiBig", 17), ("UiOracle", 20), ("UiTitle", 26)]   # name, target cap height (px)
+FONTS = [("UiSmall", 9), ("UiLabel", 11), ("UiBig", 17), ("UiOracle", 20), ("UiTitle", 26)]   # name, target cap height (px)
+# v3.36: UiLabel for the app names on the home screen (one step up from UiSmall).
 # v3.17: UiSmall/UiBig/UiTitle one step up from 8 / 15 / 23. v3.19: UiOracle for the 8-ball answers.
 
 
