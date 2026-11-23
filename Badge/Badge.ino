@@ -569,7 +569,7 @@ void drawMenu() {
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
   snprintf(t, sizeof(t), "This badge: %s", sosMeLabel());
   uiText(ROW_X + 18, y + 9, t, &UiBig, RGB565_WHITE);
-  uiText(ROW_X + 18, y + 33, "tap to change: Claudio / Danny / Walter", &UiSmall, sub);
+  uiText(ROW_X + 18, y + 33, "tap to change: Claud-I/O / Danny / Walter", &UiSmall, sub);
 
   y += ROW_H + ROW_GAP;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
@@ -1100,7 +1100,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.38 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.39 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

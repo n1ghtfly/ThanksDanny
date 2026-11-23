@@ -1,8 +1,8 @@
 # Thanks Danny badge - notes for Claude Code
 
 Firmware and tools for the "Sons of Sudo" badges: Waveshare ESP32-S3-Touch-AMOLED-1.75C
-(466x466 round AMOLED, CST9217 touch, QMI8658 IMU, ES8311 audio). Three badges: Claudio, Danny,
-Walter. Owner works on Windows; the badge is on COM13 (USB VID 303A).
+(466x466 round AMOLED, CST9217 touch, QMI8658 IMU, ES8311 audio). Three badges: Claud-I/O (id
+`claudio`), Danny, Walter - display names in `SOS_NAME`, ids in `SOS_ID` (never rename an id). Owner works on Windows; the badge is on COM13 (USB VID 303A).
 
 Read first: `PROJECT.md` (what everything is, current version) and the newest sections of
 `README.md` (engineering log, one section per version - add one for every change).

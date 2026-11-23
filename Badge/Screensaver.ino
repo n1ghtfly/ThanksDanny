@@ -7,7 +7,7 @@
  *     stays put and moves on to the next index every SV_QUOTE_MS;
  *   - a CRAWL along the bottom edge: an amber band scrolling every index and the odd headline.
  * The prices are a random walk with a personality per index ($DANNY only ever goes up, $MEETING
- * only down, $COFFEE is permanently LIMIT DOWN). Some are live: $CLAUDIO/$DANNY/$WALTER show
+ * only down, $COFFEE is permanently LIMIT DOWN). Some are live: $CLAUD-I/O/$DANNY/$WALTER show
  * MKT CLOSED while that badge is offline, $SLAP is this badge's real slap count, and $BEER is in
  * PRE-MARKET until 17:00.
  *
@@ -91,7 +91,7 @@ static SvStock SV[] = {
   { "$SUDO",    420.69, 420.69,  0.0010, 0.004, SK_WALK,   -1, nullptr,       "Sons of Sudo Composite" },
   { "$DANNY",  1337.00, 1337.00, 0.0040, 0.002, SK_MEMBER,  1, nullptr,       "analysts: still a legend" },
   { "$COFFEE",    3.20,   0.32,  0,      0,     SK_STATUS, -1, "LIMIT DOWN",  "machine empty again" },
-  { "$CLAUDIO", 256.00, 256.00,  0.0005, 0.005, SK_MEMBER,  0, nullptr,       "steady, lightly caffeinated" },
+  { "$CLAUD-I/O", 256.00, 256.00,  0.0005, 0.005, SK_MEMBER,  0, nullptr,       "steady, lightly caffeinated" },
   { "$BUGS",    404.00, 404.00,  0.0080, 0.006, SK_WALK,   -1, nullptr,       "to the moon" },
   { "$WALTER",  314.15, 314.15,  0.0000, 0.008, SK_MEMBER,  2, nullptr,       "volatile after lunch" },
   { "$MEETING",   1.00,   0.12, -0.0200, 0.010, SK_WALK,   -1, nullptr,       "could have been an email" },
@@ -106,7 +106,7 @@ static const char *SV_NEWS[] = {
   "BREAKING: DANNY APPROVES EVERYTHING",
   "FED HOLDS COFFEE RATE AT ZERO",
   "SEC PROBES WALTER'S SNACK DRAWER",
-  "CLAUDIO ISSUES PROFIT WARNING ON SLEEP",
+  "CLAUD-I/O ISSUES PROFIT WARNING ON SLEEP",
   "RUMOURS SPIKE AFTER LEAKED MP3",
   "ASK DANNY OUTLOOK: MAYBE",
   "SUDO GRANTS ITSELF A BONUS",

@@ -1053,6 +1053,15 @@ no ANCS: media keys only.
   internal RAM), connected, link encrypted, iPhone notifications on, each notification.
 - Build: **3,334,935 bytes** (70%; Bluetooth adds ~250 kB), static RAM 28%.
 
+## v3.39 - Claudio is now Claud-I/O
+
+Display name only: `SOS_NAME[0] = "CLAUD-I/O"` - slap screen, slap pop-up, Settings, the remote page, the
+Bluetooth name ("SoS CLAUD-I/O"), the screensaver ticker (`$CLAUD-I/O`, headline) and `web/poll.html`. The clock
+HUD now shows the display name (it showed the id). The **id stays `claudio`**: MQTT login, topics, the ACL's
+`%u`, `badge-claudio.local` and `tools/sos_cli.py` are unchanged - nothing to change on the broker.
+Checked: the 9-character name fits under its slap button and in the clock HUD; "CLAUD-I/O SLAPPED YOU!" uses
+the smaller size like other long lines. Build: 3,334,979 bytes (70%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

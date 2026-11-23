@@ -263,7 +263,7 @@ static void clkFrame() {
   if (full || millis() - clkInfoAt >= 1000) {               // Wi-Fi calls go through the Wi-Fi task: not every frame
     clkInfoAt = millis();
     clkLink = sosLinkUp();                                  // Sos.ino
-    const char *me = sosMeId();
+    const char *me = sosMeIndex() >= 0 ? sosMeLabel() : "";          // v3.39: the display name (Claud-I/O)
     snprintf(clkName, sizeof(clkName), "SONS OF SUDO // %s", me && *me ? me : "BADGE");
     for (char *p = clkName; *p; p++) *p = toupper((unsigned char)*p);
     if (WiFi.status() == WL_CONNECTED) snprintf(clkWifi, sizeof(clkWifi), "WIFI %ddBm", (int)WiFi.RSSI());

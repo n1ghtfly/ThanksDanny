@@ -1,7 +1,7 @@
 /*
  * Sos — the Sons of Sudo badge network: who is online, and remote slaps.
  *
- * Members: Claudio, Danny, Walter. Every badge runs the same firmware; Settings says which
+ * Members: Claud-I/O (id claudio), Danny, Walter. Every badge runs the same firmware; Settings says which
  * person this badge belongs to. The broker (your own Mosquitto, see server/mosquitto/) and its
  * login are entered on the phone setup page and stored only on the badge (NVS "sos"), never in
  * the code - the repository is public.
@@ -41,7 +41,8 @@
 
 #define SOS_N 3
 static const char *SOS_ID[SOS_N]   = { "claudio", "danny", "walter" };
-static const char *SOS_NAME[SOS_N] = { "CLAUDIO", "DANNY", "WALTER" };
+static const char *SOS_NAME[SOS_N] = { "CLAUD-I/O", "DANNY", "WALTER" };   // shown on screen (v3.39: Claud-I/O)
+// SOS_ID is the MQTT login, the topics and the hostname: never rename those (the broker ACL uses %u).
 
 #define SOS_SWING_DPS   480        // a turn faster than this starts a slap
 #define SOS_FULL_DPS    2000       // ...this fast is a 10

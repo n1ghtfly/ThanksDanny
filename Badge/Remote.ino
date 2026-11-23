@@ -11,7 +11,7 @@
  *   GET /remote          the page (one self-contained HTML document, below)
  *   GET /api/state       JSON: name, version, volume, muted, screen, gotchi needs, who is online
  *   GET /api/do?...      vol=N | mute=0/1 | play=slap|drum|chime|rumour | app=NAME | home=1 | oracle=1 |
- *                        slap=CLAUDIO|DANNY|WALTER | gotchi=coffee|thanks|sleep        -> {"ok":true}
+ *                        slap=CLAUD-I/O|DANNY|WALTER | gotchi=coffee|thanks|sleep        -> {"ok":true}
  * Volume and mute act at once; everything that draws or plays is QUEUED and done by remoteTick() in
  * loop(), so a 2 s Oracle animation never runs inside the web request.
  * No password: anyone on the same Wi-Fi can use it (as with the setup page).

@@ -59,7 +59,7 @@ async function load(){try{const r=await fetch('/api/state');st=await r.json();
  document.getElementById('sub').textContent='v'+st.ver+'  -  showing '+st.screen.toLowerCase()+'  -  '+(st.link?'badge network up':'badge network down');
  if(document.activeElement.id!='vol'){document.getElementById('vol').value=st.vol;document.getElementById('volv').textContent=st.vol}
  const m=document.getElementById('mute');m.textContent=st.muted?'Sounds OFF':'Sounds ON';m.className='tog '+(st.muted?'off':'on');
- document.getElementById('slaps').innerHTML=st.badges.filter(b=>!b.me).map(b=>`<button onclick="go('slap=${b.name}','Slapped ${b.name}!')"><span class="dot ${b.up?'up':''}"></span>${b.name}</button>`).join('')||'<span style="color:#8d9ab8">set up the badge network first</span>';
+ document.getElementById('slaps').innerHTML=st.badges.filter(b=>!b.me).map(b=>`<button onclick="go('slap='+encodeURIComponent('${b.name}'),'Slapped ${b.name}!')"><span class="dot ${b.up?'up':''}"></span>${b.name}</button>`).join('')||'<span style="color:#8d9ab8">set up the badge network first</span>';
  const g=st.gotchi;for(const[k,v]of[['c',g.c],['m',g.m],['e',g.e]]){document.getElementById('g'+k).textContent=v+'%';const b=document.getElementById('b'+k);b.style.width=v+'%';b.style.opacity=v<25?.55:1}
  document.getElementById('gst').textContent=g.dead?'- KERNEL PANIC':g.asleep?'- asleep':'';
  document.getElementById('gthx').textContent=g.dead?'Reboot':'Thanks';document.getElementById('gslp').textContent=g.asleep?'Wake':'Sleep';
