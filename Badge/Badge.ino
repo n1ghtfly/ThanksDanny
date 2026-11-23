@@ -513,9 +513,9 @@ void drawMenu() {
 
   y += ROW_H + ROW_GAP;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
-  snprintf(t, sizeof(t), "Slap sound: %s", sosIsMuted() ? "OFF" : "ON");
+  snprintf(t, sizeof(t), "Sounds: %s", sosIsMuted() ? "OFF" : "ON");    // v3.34: slaps, oracle, gotchi
   uiText(ROW_X + 18, y + 9, t, &UiBig, RGB565_WHITE);
-  uiText(ROW_X + 18, y + 33, sosIsMuted() ? "slaps arrive silently (meeting mode)" : "tap to mute for meetings", &UiSmall, sub);
+  uiText(ROW_X + 18, y + 33, sosIsMuted() ? "silent - meeting mode" : "slaps, oracle, gotchi - tap to mute", &UiSmall, sub);
 
   y += ROW_H + ROW_GAP;
   button(ROW_X, y, ROW_W, ROW_H, RGB565(28, 28, 36), RGB565(80, 80, 96));
@@ -1028,7 +1028,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.33 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, slap, settings + screensaver ===");
+  Serial.println("=== Thanks Danny badge v3.34 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, slap, settings + screensaver ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

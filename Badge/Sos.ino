@@ -208,6 +208,7 @@ void sosSoundTask(void *arg) {
 }
 
 void sosSwish(int gain) { sosPlay(SND_SWISH, SND_SWISH_LEN, gain); }   // for other apps (Oracle)
+bool sosSoundBusy() { return sosSndBusy; }       // v3.34: lets the Oracle wait for the swirl to end
 
 void sosPlay(const int16_t *pcm, int len, int gain) {
   if (sosMuted || sosSndBusy || !decAudioInit()) return;

@@ -961,6 +961,22 @@ glasses, blue hoodie with a green `>_` prompt) who lives on the badge and needs 
   plus a grey palette for the crash).
 - Build: **2,971,559 bytes** (62%).
 
+## v3.34 - Oracle sounds
+
+Owner: "the eight ball is without sound?" - it only played the slap swish at 60% volume.
+
+- **Swirl** (1.45 s, starts with the spin): the liquid of a magic 8-ball - low-pass filtered noise whose
+  cutoff rises and falls with the swirl, slosh waves that slow down, and bubbles (short upward-gliding
+  sine blips, fewer as it settles). Shorter than the 1.6 s spin so the speaker is free for:
+- **Reveal** (1.7 s, as the answer window opens): a bell arpeggio A5 - C#6 - E6 - A6 (inharmonic partials,
+  exponential decay) with a little shimmer. If the swirl is still finishing, the Oracle waits up to 250 ms
+  (`sosSoundBusy()`, new in Sos.ino) instead of skipping it.
+- Synthesised by `tools/make_oracle_sounds.py` (no third-party audio) -> `Badge/oracle_sounds.h`, 98 kB,
+  16 kHz int16, played with `sosPlay`. `--wav` writes listenable copies.
+- The Settings mute row is now **"Sounds: ON/OFF"** ("slaps, oracle, gotchi - tap to mute"): it always
+  silenced all three, but was labelled "Slap sound".
+- Build: **3,072,371 bytes** (65%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
