@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.48, 24 Nov 2026)
+# Thanks Danny badge - project index (v3.49, 24 Nov 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.48)
+## What the badge does (v3.49)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home** (v3.36): Sons of Sudo wallpaper with an app grid under the sign - two pages of five big icons
@@ -66,6 +66,7 @@ measurements); this page is the map.
 | `tools/flash_badge.cmd` | Double-click: clean build + upload + boot log. |
 | `tools/prep_decider.py` | `assets/chooser` badges -> `Badge/decider_assets.h` |
 | `tools/prep_decider_sound.py` | `assets/chooser/drummroll.mp3` -> `Badge/decider_sound.h` (needs ffmpeg) |
+| `tools/flash_filesystem.cmd` | once per badge: builds + writes the LittleFS image (wallpaper) at 0x910000 |
 | `tools/prep_wallpapers.py`, `make_fs_image.py` | wallpapers -> `data/wallpaper` -> `build/wallpaper.littlefs.bin` |
 | `server/mosquitto/` | config, ACL, Docker file and setup steps for the badges' Mosquitto |
 | `tools/sos_cli.py` | watch / who / slap from a PC (`pip install paho-mqtt`) |

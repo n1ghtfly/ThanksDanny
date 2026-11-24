@@ -807,8 +807,14 @@ void wallpaperBlit() {
     } else {
       File f = LittleFS.open(WALLPAPER_FILE, FILE_READ);
       if (!f) {
-        Serial.printf("! %s missing - is the filesystem image flashed?\n", WALLPAPER_FILE);
-        free(wallBuf); wallBuf = nullptr;
+        // v3.49: no wallpaper file (filesystem image not flashed): a plain dark blue gradient instead,
+        // so the home screen, its page swipes and everything that restores wallpaper rows still work.
+        Serial.printf("! %s missing - plain background (tools\\flash_filesystem.cmd adds the wallpaper)\n", WALLPAPER_FILE);
+        for (int y = 0; y < PANEL_PX; y++) {
+          uint16_t c = RGB565(8 + y * 16 / PANEL_PX, 14 + y * 30 / PANEL_PX, 40 + y * 50 / PANEL_PX);
+          uint16_t *row = wallBuf + (size_t)y * PANEL_PX;
+          for (int x = 0; x < PANEL_PX; x++) row[x] = c;
+        }
       } else {
         f.seek(0);
         uint32_t t0 = millis();

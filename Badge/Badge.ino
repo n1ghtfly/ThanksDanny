@@ -1436,7 +1436,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.48 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.49 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1470,9 +1470,14 @@ void setup() {
                 pillOK ? "yes" : "NO", rowsOK ? "yes" : "NO");
   if (!cogOK || !appsOK || !pillOK || !rowsOK) Serial.println("! a control sits outside the round aperture");
 
+  // v3.49: a badge that never had our filesystem image (a new board still holding the stock firmware's
+  // data) used to stop setup() right here: black screen, no touch, only the screensaver came up later.
+  // Now the partition is formatted and the badge starts without its wallpaper (a plain background);
+  // pictures and rumours download as usual. tools\flash_filesystem.cmd puts the wallpaper on.
   if (!LittleFS.begin(false)) {
-    Serial.println("! LittleFS mount FAILED - is the filesystem image flashed at 0x910000?");
-    return;
+    Serial.println("! LittleFS mount FAILED - no filesystem image at 0x910000; formatting it (about a minute)");
+    if (!LittleFS.begin(true)) Serial.println("! LittleFS format FAILED - carrying on without files");
+    else Serial.println("fs     : formatted - run tools\\flash_filesystem.cmd to add the wallpaper");
   }
   Serial.printf("fs     : LittleFS mounted, %u kB used of %u kB\n",
                 (unsigned)(LittleFS.usedBytes() / 1024), (unsigned)(LittleFS.totalBytes() / 1024));

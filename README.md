@@ -1194,6 +1194,21 @@ Changes:
   quicker to respond after opening), `TAP_GUARD_MS` 90 -> 60.
 Build: 3,592,055 bytes (76%).
 
+## v3.49 - a new badge without the filesystem image no longer stays black
+
+A second board (fresh from Waveshare's stock firmware) showed a black screen until the screensaver
+came on. Its filesystem partition (0x910000) still held the stock firmware's data, `LittleFS.begin(false)`
+failed, and setup() simply returned - before touch, the network and the home screen; only loop()'s
+screensaver check still ran. `flash_badge.cmd` writes only the app, so the first badge never hit this
+(its image was flashed once, long ago).
+- setup(): a failed mount now formats the partition (`LittleFS.begin(true)`, about a minute, logged)
+  and carries on. Pictures and rumours download into it as usual.
+- No wallpaper file: `wallpaperBlit()` fills its PSRAM copy with a plain dark-blue gradient instead
+  of giving up, so the home screen, page swipes and row restores all work.
+- New `tools\flash_filesystem.cmd`: builds the image with `make_fs_image.py` and writes it with the
+  core's esptool to 0x910000 - once per badge, for the wallpaper.
+Build: 3,592,443 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
