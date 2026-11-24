@@ -533,13 +533,37 @@ static int dragScroll = 0;                  // page p sits at p * LCD_WIDTH
 static uint32_t dragFrameAt = 0;
 static int dragFrames = 0;
 
+static uint16_t *dragSave = nullptr;        // the band as it was on the glass, while the layers are made
+static bool dragCacheOk = false, dragCacheCare = false;
+static bool homeGliding = false;
+static int glideFrom = 0, glideTo = 0, glideTarget = 0, glideMx = 0;
+static uint32_t glideAt = 0, glidePressMs = 0, dragUs = 0;
+static int16_t rowX0[GRID_BAND_H], rowLen[GRID_BAND_H];   // v3.43: the visible part of each band row
+
+// v3.43: the layers are made ONCE (while the home screen sits idle, see homeDragWarm) and kept; they
+// are only made again when Gotchi's red dot changes. Before, every drag started with ~60+ ms of
+// drawing (band, two pages of icons) - the "sluggish" start, and again on every page.
 static bool homeDragPrepare() {
+  bool gotNeedsCare();
+  bool care = gotNeedsCare();
+  if (dragCacheOk && care == dragCacheCare) return true;
+  uint32_t t0 = millis();
   size_t n = (size_t)LCD_WIDTH * GRID_BAND_H;
   if (!dragBg) dragBg = (uint16_t *)ps_malloc(n * 2);
+  if (!dragSave) dragSave = (uint16_t *)ps_malloc(n * 2);
   for (int p = 0; p < GRID_PAGES; p++) if (!dragLayer[p]) dragLayer[p] = (uint16_t *)ps_malloc(n * 2);
-  if (!dragBg) return false;
+  if (!dragBg || !dragSave) return false;
   for (int p = 0; p < GRID_PAGES; p++) if (!dragLayer[p]) return false;
+  for (int r = 0; r < GRID_BAND_H; r++) {     // only what the round glass shows (+2 px), even-aligned
+    int dy = GRID_Y0 + r - PANEL_R;
+    int hw = dy * dy < PANEL_R * PANEL_R ? (int)sqrtf((float)(PANEL_R * PANEL_R - dy * dy)) + 2 : 0;
+    int x0 = (PANEL_R - hw) & ~1;
+    if (x0 < 0) x0 = 0;
+    int x1 = PANEL_R + hw; if (x1 > LCD_WIDTH) x1 = LCD_WIDTH;
+    rowX0[r] = x0; rowLen[r] = x1 > x0 ? x1 - x0 : 0;
+  }
   uint16_t *band = gfx->getFramebuffer() + (size_t)GRID_Y0 * LCD_WIDTH;
+  memcpy(dragSave, band, n * 2);              // the canvas band is borrowed and put back
   gridBand();
   memcpy(dragBg, band, n * 2);
   int keep = homePage;
@@ -552,8 +576,20 @@ static bool homeDragPrepare() {
   }
   homePage = keep;
   iconBlendBg = nullptr;
-  dragFrames = 0;
+  memcpy(band, dragSave, n * 2);
+  dragCacheOk = true;
+  dragCacheCare = care;
+  Serial.printf("ui     : drag layers made in %lu ms\n", (unsigned long)(millis() - t0));
   return true;
+}
+
+// loop(): make the layers while nothing happens, so the first drag starts at once.
+void homeDragWarm() {
+  if (screen != ST_HOME || touchDown || homeGliding || millis() - lastTap < 400) return;
+  static uint32_t checkedAt = 0;              // made already: just see now and then if the red dot changed
+  if (dragCacheOk && millis() - checkedAt < 2000) return;
+  checkedAt = millis();
+  homeDragPrepare();
 }
 
 // Copy `len` pixels of a layer row over the band row, skipping the key colour.
@@ -562,25 +598,28 @@ static inline void dragMix(uint16_t *d, const uint16_t *bg, const uint16_t *l, i
 }
 
 static void homeDragDraw(int scroll) {
+  uint32_t u0 = micros();
   uint16_t *band = gfx->getFramebuffer() + (size_t)GRID_Y0 * LCD_WIDTH;
   int p0 = scroll >= 0 ? scroll / LCD_WIDTH : -1;
   int o = scroll - p0 * LCD_WIDTH;            // 0..LCD_WIDTH-1: where page p0 is cut
-  int len0 = LCD_WIDTH - o;
+  int cut = LCD_WIDTH - o;                    // screen x where page p0 ends
   bool has0 = p0 >= 0 && p0 < GRID_PAGES, has1 = p0 + 1 >= 0 && p0 + 1 < GRID_PAGES;
   for (int r = 0; r < GRID_BAND_H; r++) {
     size_t row = (size_t)r * LCD_WIDTH;
+    int a = rowX0[r], b = rowX0[r] + rowLen[r];
+    if (a >= b) continue;
     uint16_t *d = band + row;
     const uint16_t *bg = dragBg + row;
-    if (has0) dragMix(d, bg, dragLayer[p0] + row + o, len0); else memcpy(d, bg, len0 * 2);
-    if (o) {
-      if (has1) dragMix(d + len0, bg + len0, dragLayer[p0 + 1] + row, o); else memcpy(d + len0, bg + len0, o * 2);
-    }
+    int m = cut < a ? a : cut > b ? b : cut;  // [a, m) from page p0, [m, b) from page p0 + 1
+    if (m > a) { if (has0) dragMix(d + a, bg + a, dragLayer[p0] + row + o + a, m - a); else memcpy(d + a, bg + a, (m - a) * 2); }
+    if (b > m) { if (has1) dragMix(d + m, bg + m, dragLayer[p0 + 1] + row + (m - cut), b - m); else memcpy(d + m, bg + m, (b - m) * 2); }
   }
   int near = (scroll + LCD_WIDTH / 2) / LCD_WIDTH;
   gridDots(near < 0 ? 0 : near >= GRID_PAGES ? GRID_PAGES - 1 : near);
   flushRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H);
   dragScroll = scroll;
   dragFrames++;
+  dragUs += micros() - u0;
 }
 
 // The finger moved: mx = how far sideways since the press. Past the first/last page it gives way slowly.
@@ -590,33 +629,48 @@ static void homeDragMove(int mx) {
   if (s < 0) s /= 3;
   else if (s > maxS) s = maxS + (s - maxS) / 3;
   uint32_t now = millis();
-  if (s == dragScroll || now - dragFrameAt < 10) return;
+  if (s == dragScroll || now - dragFrameAt < 8) return;
   dragFrameAt = now;
   homeDragDraw(s);
 }
 
-// Finger up after a drag: glide to the page it lands on, then draw that page the normal way.
+// The glide's last frame: the page as it rests, with its arrows.
+static void homeGlideFinish() {
+  if (!homeGliding) return;
+  homeGliding = false;
+  homePage = glideTarget;
+  if (dragScroll != glideTo) homeDragDraw(glideTo);
+  gridPager();                                // arrows (and dots) on top of the composed band
+  flushRect(0, GRID_ARROW_Y - 20, LCD_WIDTH, 40);
+  flushRect(0, GRID_DOTS_Y - 6, LCD_WIDTH, 12);
+  Serial.printf("ui     : home page %d/%d (drag %d px, %lu ms, %d frames, %lu ms/frame)\n", homePage + 1, GRID_PAGES,
+                glideMx, (unsigned long)glidePressMs, dragFrames, dragFrames ? (unsigned long)(dragUs / dragFrames / 1000) : 0UL);
+}
+
+// Finger up after a drag: start gliding to the page it lands on. v3.43: the glide runs from loop()
+// (homeGlideTick) instead of blocking, so a new touch is seen at once - it finishes the glide on the spot.
 static void homeDragEnd(int mx, uint32_t pressMs) {
   homeDragging = false;
   int target = homePage;
-  bool flick = abs(mx) > 40 && pressMs < 250;
+  bool flick = abs(mx) > 30 && pressMs < 250;
   if (abs(mx) > LCD_WIDTH / 4 || flick) target += mx < 0 ? 1 : -1;
   if (target < 0) target = 0;
   if (target >= GRID_PAGES) target = GRID_PAGES - 1;
-  int from = dragScroll, to = target * LCD_WIDTH;
-  uint32_t t0 = millis();
-  const uint32_t dur = 170;
-  while (true) {                              // ease-out: fast start, gentle stop (~10 frames)
-    uint32_t t = millis() - t0;
-    if (t >= dur) break;
-    float f = (float)t / dur, e = 1 - (1 - f) * (1 - f) * (1 - f);
-    homeDragDraw(from + (int)((to - from) * e));
-  }
-  homePage = target;
-  drawGrid();
-  flushRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H);
-  Serial.printf("ui     : home page %d/%d (drag %d px, %lu ms, %d frames)\n", homePage + 1, GRID_PAGES, mx,
-                (unsigned long)pressMs, dragFrames);
+  glideFrom = dragScroll; glideTo = target * LCD_WIDTH; glideTarget = target;
+  glideMx = mx; glidePressMs = pressMs; glideAt = millis();
+  homeGliding = true;
+}
+
+void homeGlideTick() {
+  if (!homeGliding) return;
+  if (screen != ST_HOME) { homeGliding = false; homePage = glideTarget; return; }
+  const uint32_t dur = 160;
+  uint32_t t = millis() - glideAt;
+  if (t >= dur) { homeGlideFinish(); return; }
+  if (millis() - dragFrameAt < 8) return;
+  dragFrameAt = millis();
+  float f = (float)t / dur, e = 1 - (1 - f) * (1 - f) * (1 - f);   // ease-out
+  homeDragDraw(glideFrom + (int)((glideTo - glideFrom) * e));
 }
 
 // Which slot of the current page a point is on, or -1.
@@ -1178,6 +1232,7 @@ void pollTouch() {
         tSwiped = true;
         Serial.printf("touch  : press %lu ms after a screen change - same finger, ignored\n", (unsigned long)(now - tScreenAt));
       } else if (screen == ST_HOME) {
+        homeGlideFinish();                     // v3.43: a touch during the glide lands it at once
         homePressFeedback(tStartX, tStartY);
       } else if (now - lastTap > TAP_GUARD_MS) {
         tSwiped = true;                      // consumed: nothing more happens on the lift
@@ -1198,10 +1253,14 @@ void pollTouch() {
     } else if (screen == ST_HOME && !tSwiped) {
       int mx = tLastX - tStartX, my = tLastY - tStartY;
       if (abs(mx) > DRAG_START && 2 * abs(mx) > 3 * abs(my)) {
-        homePressClear();
         tSwiped = true;
-        if (homeDragPrepare()) { homeDragging = true; dragScroll = homePage * LCD_WIDTH; homeDragMove(mx); }
-        else homePageGo(mx < 0 ? 1 : -1);    // no PSRAM for the layers: the old jump
+        if (homeDragPrepare()) {
+          // v3.43: no full redraw to take the press highlight off - the drag frames repaint the band;
+          // only the frame's top edge sits above it (rows GRID_Y0-6..)
+          if (homePressed >= 0) { homePressed = -1; wallpaperRows(GRID_Y0 - 8, GRID_Y0 - 1); flushRect(0, GRID_Y0 - 8, LCD_WIDTH, 8); }
+          homeDragging = true; dragScroll = homePage * LCD_WIDTH; dragFrames = 0; dragUs = 0; dragFrameAt = 0;
+          homeDragMove(mx);
+        } else { homePressClear(); homePageGo(mx < 0 ? 1 : -1); }   // no PSRAM for the layers: the old jump
       } else if (homePressed >= 0 && mx * mx + my * my > 30 * 30) { homePressClear(); tSwiped = true; }
     }
     return;
@@ -1236,7 +1295,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.42 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.43 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1386,6 +1445,7 @@ void loop() {
   if (screen == ST_ORACLE && !saverActive()) oracleTick();           // a shake asks the oracle
   if (screen == ST_CLOCK && !saverActive()) clockTick();             // the watch ticks (v3.27)
   if (screen == ST_GOTCHI && !saverActive()) gotchiTick();           // Danny-gotchi lives (v3.33)
+  if (screen == ST_HOME && !saverActive()) { homeGlideTick(); homeDragWarm(); }   // v3.43: page glide, drag layers
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
   // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
   // printed just before it in the log show what was running.

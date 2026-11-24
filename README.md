@@ -1111,6 +1111,22 @@ Pressed = the tile lightens with a white frame; Gotchi's red "needs you" dot sit
 Drag layers (v3.41) blend tile edges against a copy of the band (`iconBlendBg`), not the key colour, so no
 dark halo while sliding. Preview: `preview_home_icons_screen.png`. Build: 3,588,811 bytes (76%).
 
+## v3.43 - snappier page swipes
+
+Swiping felt sluggish, worst right after a page change. Causes and fixes:
+- Every drag started by drawing everything: take the press highlight off (full band redraw), then the
+  background band and both pages of icons for the layers (~60-100 ms before anything moved). Now the layers
+  are made ONCE, while the home screen sits idle (`homeDragWarm()` from loop, borrowing the canvas band and
+  putting it back), and only made again when Gotchi's red dot changes. The press highlight is not redrawn
+  away - the drag frames repaint the band; only the frame's top edge above the band is restored.
+- The glide after the lift BLOCKED loop() for 170 ms and then redrew the whole band (another ~30 ms):
+  a quick second swipe was half missed. The glide now runs from loop() (`homeGlideTick()`, 160 ms
+  ease-out); a new touch lands it at once. At the end only the arrows and dots are drawn and sent.
+- Each frame mixes only the part of each band row the round glass shows (~20% less work).
+- Flick: >30 px in <250 ms (was 40).
+Log: `ui     : drag layers made in N ms`, and per page change `... N frames, N ms/frame`.
+Build: 3,589,823 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
