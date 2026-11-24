@@ -1154,6 +1154,16 @@ after every page change a red pill replaces the network pill for 6 s (and `ui   
 
 A photo of the badge is enough to see where the time goes. Build: 3,591,443 bytes (76%).
 
+## v3.46 - find the stall: loop() profile in the swipe pill
+
+The v3.45 photo: `F28/46 1st50 f3 d9/10 gap530 mv0`. The fast flush works (28 ms full frame vs 46) and a
+drag frame takes only 9-10 ms - drawing is not the problem. But only 3 frames were drawn, ~530 ms apart,
+and no touch report was handled while dragging: loop() is BLOCKED for about half a second or more right
+after the drag starts, so the drag cannot follow the finger and the glide skips to the end.
+To find what blocks: loop() is now timed in 9 parts (web, remote, phone, touch, wifi, sos, apps, home,
+saver); the worst pass of each since the finger went down is kept, and the swipe pill shows the slowest:
+`f3 d9 gap530 mv0 1st50 slow:web 812`. Build: 3,591,851 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

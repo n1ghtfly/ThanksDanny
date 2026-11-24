@@ -706,7 +706,12 @@ static void homeGlideFinish() {
   // moving frame, f = frames drawn, d = ms to draw one (avg/max), gap = ms between frames, mv = touch reports
   char t[96];
   unsigned long gap = dragFrames > 1 ? (dragLastAt - dragFirstAt) / (dragFrames - 1) : 0;
-  snprintf(t, sizeof(t), "F%lu/%lu%s 1st%lu f%d d%lu/%lu gap%lu mv%d", (unsigned long)bootFlushMs, (unsigned long)bootSlowMs,
+  int loopProfileWorst(uint32_t *us); const char *loopPartName(int i);
+  uint32_t wus; int wi = loopProfileWorst(&wus);
+  snprintf(t, sizeof(t), "f%d d%lu gap%lu mv%d 1st%lu slow:%s %lu", dragFrames,
+           dragFrames ? (unsigned long)(dragUs / dragFrames / 1000) : 0UL, gap, dragTouchMoves,
+           (unsigned long)(dragFirstAt - dragDownAt), loopPartName(wi), (unsigned long)(wus / 1000));
+  if (0) snprintf(t, sizeof(t), "F%lu/%lu%s 1st%lu f%d d%lu/%lu gap%lu mv%d", (unsigned long)bootFlushMs, (unsigned long)bootSlowMs,
            fastLcdReady() ? "" : "!", (unsigned long)(dragFirstAt - dragDownAt), dragFrames,
            dragFrames ? (unsigned long)(dragUs / dragFrames / 1000) : 0UL, (unsigned long)(dragFrameMaxUs / 1000), gap, dragTouchMoves);
   Serial.printf("ui     : diag %s\n", t);
@@ -1322,6 +1327,7 @@ void pollTouch() {
         tSwiped = true;
         Serial.printf("touch  : press %lu ms after a screen change - same finger, ignored\n", (unsigned long)(now - tScreenAt));
       } else if (screen == ST_HOME) {
+        loopProfileReset();                    // v3.46: measure this swipe
         homeGlideFinish();                     // v3.43: a touch during the glide lands it at once
         homePressFeedback(tStartX, tStartY);
       } else if (now - lastTap > TAP_GUARD_MS) {
@@ -1386,7 +1392,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.45 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.46 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1471,10 +1477,28 @@ void setup() {
   Serial.println("ready");
 }
 
+// v3.46: where does loop() spend its time? The worst pass of each part since the last swipe started is kept
+// and shown in the swipe pill ("slow web 812"). LP(i) closes part i.
+static const char *LP_NAME[9] = { "web", "remote", "phone", "touch", "wifi", "sos", "apps", "home", "saver" };
+static uint32_t lpMax[9], lpMaxAll = 0, lpT0 = 0, lpPass0 = 0;
+#define LP(i) do { uint32_t _n = micros(); if (_n - lpT0 > lpMax[i]) lpMax[i] = _n - lpT0; lpT0 = _n; } while (0)
+const char *loopPartName(int i) { return i >= 0 && i < 9 ? LP_NAME[i] : "?"; }
+void loopProfileReset() { memset(lpMax, 0, sizeof(lpMax)); lpMaxAll = 0; }
+int loopProfileWorst(uint32_t *us) {
+  int w = 0;
+  for (int i = 1; i < 9; i++) if (lpMax[i] > lpMax[w]) w = i;
+  *us = lpMax[w];
+  return w;
+}
+
 void loop() {
+  lpPass0 = lpT0 = micros();
   server.handleClient();               // setup page + remote page (v3.38)
+  LP(0);
   remoteTick();                        // v3.38: a queued command from the remote page
+  LP(1);
   phoneTick();                         // v3.38: MUSIC status, iPhone notifications (Phone.ino)
+  LP(2);
 
   if (saverActive()) {
     saverLoop();                       // Screensaver.ino: tap / BOOT / lift wakes it, clock ticks
@@ -1490,6 +1514,7 @@ void loop() {
       showScreen(ST_HOME);
     }
   }
+  LP(3);
 
   if (connecting) {
     if (WiFi.status() == WL_CONNECTED) {
@@ -1530,15 +1555,21 @@ void loop() {
       if (screen == ST_APINFO) showScreen(ST_APINFO);
     }
   }
+  LP(4);
   if (screen == ST_RUMOURS && !saverActive()) { void rumoursTick(); rumoursTick(); }   // sound bars
   void sosPoll(); sosPoll();                                          // badge network: slaps, presence
+  LP(5);
   if (screen == ST_SLAP && !saverActive()) { void sosTick(); sosTick(); }   // swing detection
   if (screen == ST_RADAR && !saverActive()) radarTick();             // aircraft glide, fresh data
   if (screen == ST_ORACLE && !saverActive()) oracleTick();           // a shake asks the oracle
   if (screen == ST_CLOCK && !saverActive()) clockTick();             // the watch ticks (v3.27)
   if (screen == ST_GOTCHI && !saverActive()) gotchiTick();           // Danny-gotchi lives (v3.33)
+  LP(6);
   if (screen == ST_HOME && !saverActive()) { homeGlideTick(); homeDragWarm(); homeDiagTick(); }   // v3.43: page glide, drag layers
+  LP(7);
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
+  LP(8);
+  if (micros() - lpPass0 > lpMaxAll) lpMaxAll = micros() - lpPass0;
   // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
   // printed just before it in the log show what was running.
   static uint32_t lastPass = 0;
