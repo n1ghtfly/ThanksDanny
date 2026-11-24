@@ -1139,6 +1139,21 @@ the glide the final frame is written into the canvas once (`dragToCanvas`), so l
 start from what is on the glass. Falls back to canvas + `flushRect` without the fast path.
 Build: 3,590,795 bytes (76%).
 
+## v3.45 - swipe timing on the glass
+
+Swiping is still reported as sluggish and no serial log is at hand, so the badge now shows its own numbers:
+after every page change a red pill replaces the network pill for 6 s (and `ui     : diag ...` is logged):
+
+    F13/46 1st120 f9 d14/20 gap22 mv11
+    F    full-frame flush at boot, fast path / library path, ms ("!" = fast path NOT available)
+    1st  finger down -> first moving frame, ms (includes the 14 px it takes to become a drag)
+    f    frames drawn in the drag + glide
+    d    ms to draw one frame, average / worst
+    gap  ms between frames (drawing + waiting for touch reports)
+    mv   touch reports received while dragging
+
+A photo of the badge is enough to see where the time goes. Build: 3,591,443 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

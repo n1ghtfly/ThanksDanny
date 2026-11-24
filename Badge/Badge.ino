@@ -538,6 +538,10 @@ static bool dragCacheOk = false, dragCacheCare = false;
 static bool homeGliding = false;
 static int glideFrom = 0, glideTo = 0, glideTarget = 0, glideMx = 0;
 static uint32_t glideAt = 0, glidePressMs = 0, dragUs = 0;
+// v3.45: timing shown on the home screen after a swipe (photo-friendly diagnostics)
+static uint32_t bootFlushMs = 0, bootSlowMs = 0, dragFirstAt = 0, dragLastAt = 0, dragDownAt = 0, dragFrameMaxUs = 0;
+static uint32_t diagUntil = 0;
+static int dragTouchMoves = 0;
 static int16_t rowX0[GRID_BAND_H], rowLen[GRID_BAND_H];   // v3.43: the visible part of each band row
 
 // v3.43: the layers are made ONCE (while the home screen sits idle, see homeDragWarm) and kept; they
@@ -667,7 +671,11 @@ static void homeDragDraw(int scroll) {
   }
   dragScroll = scroll;
   dragFrames++;
-  dragUs += micros() - u0;
+  uint32_t fu = micros() - u0;
+  dragUs += fu;
+  if (fu > dragFrameMaxUs) dragFrameMaxUs = fu;
+  if (!dragFirstAt) dragFirstAt = millis();
+  dragLastAt = millis();
 }
 
 // The finger moved: mx = how far sideways since the press. Past the first/last page it gives way slowly.
@@ -694,6 +702,39 @@ static void homeGlideFinish() {
   flushRect(0, GRID_DOTS_Y - 6, LCD_WIDTH, 12);
   Serial.printf("ui     : home page %d/%d (drag %d px, %lu ms, %d frames, %lu ms/frame)\n", homePage + 1, GRID_PAGES,
                 glideMx, (unsigned long)glidePressMs, dragFrames, dragFrames ? (unsigned long)(dragUs / dragFrames / 1000) : 0UL);
+  // v3.45: the same, on the glass for 6 s:  F = full-frame flush ms (fast/lib), 1st = finger down -> first
+  // moving frame, f = frames drawn, d = ms to draw one (avg/max), gap = ms between frames, mv = touch reports
+  char t[96];
+  unsigned long gap = dragFrames > 1 ? (dragLastAt - dragFirstAt) / (dragFrames - 1) : 0;
+  snprintf(t, sizeof(t), "F%lu/%lu%s 1st%lu f%d d%lu/%lu gap%lu mv%d", (unsigned long)bootFlushMs, (unsigned long)bootSlowMs,
+           fastLcdReady() ? "" : "!", (unsigned long)(dragFirstAt - dragDownAt), dragFrames,
+           dragFrames ? (unsigned long)(dragUs / dragFrames / 1000) : 0UL, (unsigned long)(dragFrameMaxUs / 1000), gap, dragTouchMoves);
+  Serial.printf("ui     : diag %s\n", t);
+  homeDiagPill(t);
+  diagUntil = millis() + 6000;
+}
+
+// A pill at the top, like the network one, with the timing text.
+void homeDiagPill(const char *t) {
+  wallpaperRows(NET_PILL_Y - 2, NET_PILL_Y + 21);
+  gfx->setFont(&UiSmall);
+  int16_t x1, y1; uint16_t w, h;
+  gfx->getTextBounds(t, 0, 0, &x1, &y1, &w, &h);
+  gfx->setFont();
+  int pw = w + 20;
+  gfx->fillRoundRect(233 - pw / 2, NET_PILL_Y, pw, 19, 9, RGB565(40, 10, 10));
+  gfx->drawRoundRect(233 - pw / 2, NET_PILL_Y, pw, 19, 9, RGB565(200, 90, 90));
+  uiCentred(NET_PILL_Y + 5, t, &UiSmall, RGB565(255, 230, 160));
+  flushRect(0, NET_PILL_Y - 2, LCD_WIDTH, 24);
+}
+
+void homeDiagTick() {
+  if (!diagUntil || millis() < diagUntil) return;
+  diagUntil = 0;
+  if (screen != ST_HOME) return;
+  wallpaperRows(NET_PILL_Y - 2, NET_PILL_Y + 21);
+  gridNetLine();
+  flushRect(0, NET_PILL_Y - 2, LCD_WIDTH, 24);
 }
 
 // Finger up after a drag: start gliding to the page it lands on. v3.43: the glide runs from loop()
@@ -1298,6 +1339,7 @@ void pollTouch() {
     // the home screen turns the page.
     // v3.41: a sideways drag moves the pages with the finger.
     if (screen == ST_HOME && homeDragging) {
+      dragTouchMoves++;
       homeDragMove(tLastX - tStartX);
     } else if (screen == ST_HOME && !tSwiped) {
       int mx = tLastX - tStartX, my = tLastY - tStartY;
@@ -1307,7 +1349,7 @@ void pollTouch() {
           // v3.43: no full redraw to take the press highlight off - the drag frames repaint the band;
           // only the frame's top edge sits above it (rows GRID_Y0-6..)
           if (homePressed >= 0) { homePressed = -1; wallpaperRows(GRID_Y0 - 8, GRID_Y0 - 1); flushRect(0, GRID_Y0 - 8, LCD_WIDTH, 8); }
-          homeDragging = true; dragScroll = homePage * LCD_WIDTH; dragFrames = 0; dragUs = 0; dragFrameAt = 0;
+          homeDragging = true; dragScroll = homePage * LCD_WIDTH; dragFrames = 0; dragUs = 0; dragFrameAt = 0; dragFirstAt = 0; dragFrameMaxUs = 0; dragDownAt = tDownAt; dragTouchMoves = 0;
           homeDragMove(mx);
         } else { homePressClear(); homePageGo(mx < 0 ? 1 : -1); }   // no PSRAM for the layers: the old jump
       } else if (homePressed >= 0 && mx * mx + my * my > 30 * 30) { homePressClear(); tSwiped = true; }
@@ -1344,7 +1386,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.44 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.45 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1356,6 +1398,7 @@ void setup() {
   f0 = millis();
   gfx->flush();
   uint32_t flushMs = millis() - f0;
+  bootFlushMs = flushMs; bootSlowMs = slowMs;
   Serial.printf("panel  : fast flush %s - full frame %lu ms (library path %lu ms)\n",
                 fast ? "on" : "NOT available", (unsigned long)flushMs, (unsigned long)slowMs);
   panel->setBrightness(170);                   // the panel's own command, not the canvas's
@@ -1494,7 +1537,7 @@ void loop() {
   if (screen == ST_ORACLE && !saverActive()) oracleTick();           // a shake asks the oracle
   if (screen == ST_CLOCK && !saverActive()) clockTick();             // the watch ticks (v3.27)
   if (screen == ST_GOTCHI && !saverActive()) gotchiTick();           // Danny-gotchi lives (v3.33)
-  if (screen == ST_HOME && !saverActive()) { homeGlideTick(); homeDragWarm(); }   // v3.43: page glide, drag layers
+  if (screen == ST_HOME && !saverActive()) { homeGlideTick(); homeDragWarm(); homeDiagTick(); }   // v3.43: page glide, drag layers
   if (!saverActive()) saverCheck();                                   // idle long enough? screensaver
   // Stall detector (v3.6): say so when one pass of loop() took long enough to be felt. The lines
   // printed just before it in the log show what was running.
