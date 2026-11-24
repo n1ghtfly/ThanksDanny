@@ -55,6 +55,7 @@
  */
 
 #include <Arduino_GFX_Library.h>
+#include "home_icons.h"                  // v3.42: colour app tiles (tools/make_home_icons.py)
 #include "src/fastlcd.h"                // v3.41: faster flush (overlapped DMA)
 #include <LittleFS.h>
 #include <TJpg_Decoder.h>
@@ -147,21 +148,21 @@ static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "
 // v3.36: bigger icons (r 38) and names (UiLabel), so it takes PAGES: 5 apps a page, three on top and
 // two below (the round panel narrows at the bottom). Arrows beside the bottom row, a swipe, or the
 // page dots change page. The Wi-Fi / badge network line moved to a pill at the very top.
-#define GRID_R      38                   // icon disc radius (v3.32: 32, v3.36: 38)
+#define GRID_R      42                   // half a tile (v3.32: 32, v3.36: 38 disc; v3.42: 84 px colour tiles)
 #define GRID_SLOTS  5
 #define GRID_PAGES  2
 static const int GRID_SX[GRID_SLOTS] = { 113, 233, 353, 178, 288 };
-static const int GRID_SY[GRID_SLOTS] = { 278, 278, 278, 380, 380 };
+static const int GRID_SY[GRID_SLOTS] = { 282, 282, 282, 386, 386 };
 static const int GRID_PAGE[GRID_PAGES][GRID_SLOTS] = {
   { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_GOTCHI, APP_SLAP },
   { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SETTINGS, APP_MUSIC } };
-#define GRID_LBL    (GRID_R + 6)         // label top, below the icon centre
+#define GRID_LBL    (GRID_R + 8)         // label top, below the icon centre
 #define GRID_HIT    52                   // tap radius round an icon
 #define GRID_Y0     238                  // the darkened band behind the grid (wallpaper rows)
 #define GRID_Y1     465
-#define GRID_ARROW_Y 380                 // page arrows, beside the bottom row
+#define GRID_ARROW_Y 386                 // page arrows, beside the bottom row
 static const int GRID_ARROW_X[2] = { 96, 370 };
-#define GRID_DOTS_Y 452
+#define GRID_DOTS_Y 457
 #define NET_PILL_Y  30                   // Wi-Fi / badge network, top of the screen
 static int homePage = 0;
 
@@ -359,27 +360,47 @@ void centred(int y, const char *s, uint8_t size, uint16_t colour) {
 
 // One app icon: a dark disc with a ring, and the app's glyph scaled to the disc. `focus` is the
 // big middle one; the side ones get a quieter ring.
+// v3.42: phone-style colour tiles (tools/make_home_icons.py -> home_icons.h), alpha-blended into the
+// canvas so their soft edges and shadow sit on the wallpaper. `focus` (a finger on it) lightens the
+// tile. R is ignored: the tiles are one size (HICON_TILE).
+static inline uint16_t blend565(uint16_t fg, uint16_t bg, uint8_t a) {
+  uint32_t rb = (((fg & 0xF81F) * a) + ((bg & 0xF81F) * (255 - a))) >> 8;
+  uint32_t g  = (((fg & 0x07E0) * a) + ((bg & 0x07E0) * (255 - a))) >> 8;
+  return (rb & 0xF81F) | (g & 0x07E0);
+}
+
+// While the drag layers are made (homeDragPrepare) the canvas under the icons is the key colour, so
+// edges and shadows blend against this copy of the band instead (rows GRID_Y0..).
+static const uint16_t *iconBlendBg = nullptr;
+
 void drawAppIcon(int app, int cx, int cy, int R, bool focus) {
-  if (R < 6) return;
-  uint16_t ring = focus ? RGB565(120, 200, 255) : RGB565(70, 96, 130);
-  gfx->fillCircle(cx, cy, R, RGB565(12, 12, 18));
-  gfx->drawCircle(cx, cy, R, ring);
-  if (focus) gfx->drawCircle(cx, cy, R - 1, ring);
-  uint16_t fg = focus ? RGB565(150, 230, 255) : RGB565(110, 170, 200);
-  void drawDeciderIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);   // Decider.ino
-  void drawRumoursIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);   // Rumours.ino
-  void drawSlapIcon(int cx, int cy, int r, uint16_t fg, uint16_t bg);      // Sos.ino
-  switch (app) {
-    case APP_PICTURES: drawPicturesIcon(cx, cy, (R * 76) / 100, fg, RGB565(12, 12, 18)); break;
-    case APP_DECIDER:  drawDeciderIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
-    case APP_RUMOURS:  drawRumoursIcon(cx, cy, (R * 72) / 100, fg, RGB565(12, 12, 18)); break;
-    case APP_SLAP:     drawSlapIcon(cx, cy, (R * 70) / 100, fg, RGB565(12, 12, 18));    break;
-    case APP_RADAR:    drawRadarIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));   break;
-    case APP_ORACLE:   drawOracleIcon(cx, cy, (R * 66) / 100, fg, RGB565(12, 12, 18));  break;
-    case APP_CLOCK:    drawClockIcon(cx, cy, (R * 62) / 100, fg, RGB565(12, 12, 18));   break;
-    case APP_GOTCHI:   drawGotchiIcon(cx, cy, R);                                         break;
-    case APP_MUSIC:    drawMusicIcon(cx, cy, R, fg);                                      break;
-    case APP_SETTINGS: drawCog(cx, cy, (R * 52) / 100, fg, RGB565(12, 12, 18));        break;
+  if (app < 0 || app >= APP_COUNT) return;
+  const uint16_t *px = HICON_PX[app];
+  const uint8_t *al = HICON_A[app];
+  int x0 = cx - HICON_TILE / 2 - HICON_OX, y0 = cy - HICON_TILE / 2 - HICON_OY;
+  uint16_t *fb = gfx->getFramebuffer();
+  for (int j = 0; j < HICON_S; j++) {
+    int y = y0 + j;
+    if (y < 0 || y >= LCD_HEIGHT) continue;
+    uint16_t *row = fb + (size_t)y * LCD_WIDTH;
+    const uint16_t *under = row;
+    if (iconBlendBg) { if (y < GRID_Y0) continue; under = iconBlendBg + (size_t)(y - GRID_Y0) * LCD_WIDTH; }
+    for (int i = 0; i < HICON_S; i++) {
+      int x = x0 + i;
+      uint8_t a = al[j * HICON_S + i];
+      if (!a || x < 0 || x >= LCD_WIDTH) continue;
+      uint16_t c = px[j * HICON_S + i];
+      if (focus) c = blend565(0xFFFF, c, 70);
+      row[x] = a == 255 ? c : blend565(c, under[x], a);
+    }
+  }
+  if (app == APP_GOTCHI) {
+    bool gotNeedsCare();
+    if (gotNeedsCare()) {                       // Danny needs you: a red badge on the corner
+      int bx = cx + HICON_TILE / 2 - 7, by = cy - HICON_TILE / 2 + 8;
+      gfx->fillCircle(bx, by, 9, RGB565(255, 50, 60));
+      gfx->drawCircle(bx, by, 9, RGB565_WHITE);
+    }
   }
 }
 
@@ -439,10 +460,9 @@ void gridCell(int slot, bool lit) {
   if (app < 0) return;
   int x = gridX(slot), y = GRID_SY[slot];
   drawAppIcon(app, x, y, GRID_R, lit);
-  if (lit) {
-    gfx->drawCircle(x, y, GRID_R + 3, RGB565_WHITE);
-    gfx->drawCircle(x, y, GRID_R + 4, RGB565_WHITE);
-    gfx->drawCircle(x, y, GRID_R + 5, RGB565(120, 200, 255));
+  if (lit) {                                     // a white frame round the tile
+    gfx->drawRoundRect(x - GRID_R - 4, y - GRID_R - 4, 2 * GRID_R + 8, 2 * GRID_R + 8, 24, RGB565_WHITE);
+    gfx->drawRoundRect(x - GRID_R - 5, y - GRID_R - 5, 2 * GRID_R + 10, 2 * GRID_R + 10, 25, RGB565_WHITE);
   }
   gridLabel(x, y + GRID_LBL, APP_NAME[app], lit ? RGB565_WHITE : RGB565(210, 222, 236));
 }
@@ -523,6 +543,7 @@ static bool homeDragPrepare() {
   gridBand();
   memcpy(dragBg, band, n * 2);
   int keep = homePage;
+  iconBlendBg = dragBg;                       // v3.42: tile edges / shadows blend against the band
   for (int p = 0; p < GRID_PAGES; p++) {
     gfx->fillRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H, DRAG_KEY);
     homePage = p;
@@ -530,6 +551,7 @@ static bool homeDragPrepare() {
     memcpy(dragLayer[p], band, n * 2);
   }
   homePage = keep;
+  iconBlendBg = nullptr;
   dragFrames = 0;
   return true;
 }
@@ -1214,7 +1236,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.41 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.42 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

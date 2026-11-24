@@ -1097,6 +1097,20 @@ A badge with Waveshare's stock firmware (LVGL) scrolled much more smoothly. Two 
 Not changed yet: the tap guards (90 ms between taps, 300 ms after a screen change) - to be shortened once
 the faster flush is confirmed on the badge. Build: 3,338,087 bytes (70%).
 
+## v3.42 - colourful home tiles, a bit bigger
+
+Like the stock Waveshare firmware: phone-style tiles - a rounded square (superellipse) with a colour
+gradient, a soft sheen, a drop shadow and a white glyph - instead of dark 76 px discs with line icons.
+84 px tiles (`GRID_R` 42); rows moved to y 282 / 386, labels 8 px under the tile, arrows y 386, dots y 457
+(all checked against the round panel). Pre-rendered by `tools/make_home_icons.py` at 4x and scaled down
+(anti-aliased), stored as RGB565 + 8-bit alpha in `Badge/home_icons.h` (92x92 each, ~250 kB flash) and
+alpha-blended into the canvas by `drawAppIcon()`. Glyphs: Material Symbols Rounded (Google, Apache 2.0),
+filled, subset to the 8 glyphs used: `assets/fonts/MaterialSymbolsRounded-HomeIcons.ttf` (3 kB, licence
+next to it). Drawn by the tool: the Oracle 8-ball and Danny-gotchi's head (from `make_gotchi_assets.py`).
+Pressed = the tile lightens with a white frame; Gotchi's red "needs you" dot sits on the tile corner.
+Drag layers (v3.41) blend tile edges against a copy of the band (`iconBlendBg`), not the key colour, so no
+dark halo while sliding. Preview: `preview_home_icons_screen.png`. Build: 3,588,811 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
