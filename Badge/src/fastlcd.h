@@ -12,6 +12,12 @@ bool fastLcdReady();
 // the canvas), `stride` = pixels per source row. x, y, w, h even (the CO5300 rule; flushRect() rounds).
 void fastLcdBlit(int x, int y, int w, int h, const uint16_t *src, int stride);
 
+// v3.44: like fastLcdBlit, but the pixels are not read from a buffer: fn(row, dst, ctx) fills each row
+// (w pixels, ALREADY byte-swapped = big-endian RGB565) straight into the DMA buffer. Nothing goes through
+// the PSRAM canvas. false = the fast path is not available (nothing was sent).
+typedef void (*FastRowFn)(int row, uint16_t *dst, void *ctx);
+bool fastLcdStream(int x, int y, int w, int h, FastRowFn fn, void *ctx);
+
 // Arduino_Canvas whose flush() takes the fast path.
 class FastCanvas : public Arduino_Canvas {
 public:

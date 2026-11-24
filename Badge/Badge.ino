@@ -577,6 +577,9 @@ static bool homeDragPrepare() {
   homePage = keep;
   iconBlendBg = nullptr;
   memcpy(band, dragSave, n * 2);
+  // v3.44: kept byte-swapped (the panel's order), so a frame is mixed straight into the DMA buffers
+  for (size_t k = 0; k < n; k++) dragBg[k] = __builtin_bswap16(dragBg[k]);
+  for (int p = 0; p < GRID_PAGES; p++) for (size_t k = 0; k < n; k++) dragLayer[p][k] = __builtin_bswap16(dragLayer[p][k]);
   dragCacheOk = true;
   dragCacheCare = care;
   Serial.printf("ui     : drag layers made in %lu ms\n", (unsigned long)(millis() - t0));
@@ -592,31 +595,76 @@ void homeDragWarm() {
   homeDragPrepare();
 }
 
-// Copy `len` pixels of a layer row over the band row, skipping the key colour.
-static inline void dragMix(uint16_t *d, const uint16_t *bg, const uint16_t *l, int len) {
-  for (int i = 0; i < len; i++) { uint16_t v = l[i]; d[i] = v == DRAG_KEY ? bg[i] : v; }
+// A one-row scratch buffer for dragToCanvas().
+static uint16_t *flushTmpRow() {
+  static uint16_t *t = nullptr;
+  if (!t) t = (uint16_t *)malloc(LCD_WIDTH * 2);
+  return t;
+}
+
+#define DRAG_KEY_SW 0x2108                   // DRAG_KEY byte-swapped
+static int dfP0, dfO, dfCut, dfNear;
+static bool dfHas0, dfHas1;
+
+static inline void dragMixSw(uint16_t *d, const uint16_t *bg, const uint16_t *l, int len) {
+  for (int i = 0; i < len; i++) { uint16_t v = l[i]; d[i] = v == DRAG_KEY_SW ? bg[i] : v; }
+}
+
+// One band row of the current frame, byte-swapped, into dst (a whole LCD_WIDTH row). Called by fastlcd.
+static void dragRow(int r, uint16_t *dst, void *ctx) {
+  size_t row = (size_t)r * LCD_WIDTH;
+  const uint16_t *bg = dragBg + row;
+  int a = rowX0[r], b = rowX0[r] + rowLen[r];
+  if (a > 0) memset(dst, 0, a * 2);            // outside the round glass: black, never seen
+  if (b < LCD_WIDTH) memset(dst + b, 0, (LCD_WIDTH - b) * 2);
+  if (a >= b) return;
+  int m = dfCut < a ? a : dfCut > b ? b : dfCut;
+  if (m > a) { if (dfHas0) dragMixSw(dst + a, bg + a, dragLayer[dfP0] + row + dfO + a, m - a); else memcpy(dst + a, bg + a, (m - a) * 2); }
+  if (b > m) { if (dfHas1) dragMixSw(dst + m, bg + m, dragLayer[dfP0 + 1] + row + (m - dfCut), b - m); else memcpy(dst + m, bg + m, (b - m) * 2); }
+  int y = GRID_Y0 + r, dy = y - GRID_DOTS_Y;   // the page dots
+  if (dy >= -4 && dy <= 4) {
+    for (int p = 0; p < GRID_PAGES; p++) {
+      int cx = 233 + (p * 2 - (GRID_PAGES - 1)) * 9;
+      for (int x = cx - 4; x <= cx + 4; x++) {
+        int dx = x - cx, d2 = dx * dx + dy * dy;
+        if (p == dfNear ? d2 <= 17 : (d2 <= 17 && d2 >= 9)) dst[x] = p == dfNear ? 0xFFFF : __builtin_bswap16(RGB565(150, 165, 185));
+      }
+    }
+  }
+}
+
+static void dragFrameSetup(int scroll) {
+  dfP0 = scroll >= 0 ? scroll / LCD_WIDTH : -1;
+  dfO = scroll - dfP0 * LCD_WIDTH;
+  dfCut = LCD_WIDTH - dfO;
+  dfHas0 = dfP0 >= 0 && dfP0 < GRID_PAGES;
+  dfHas1 = dfP0 + 1 >= 0 && dfP0 + 1 < GRID_PAGES;
+  int near = (scroll + LCD_WIDTH / 2) / LCD_WIDTH;
+  dfNear = near < 0 ? 0 : near >= GRID_PAGES ? GRID_PAGES - 1 : near;
+}
+
+// Put the frame at `scroll` into the canvas too (normal byte order) - at the end, so later partial
+// updates of the home screen start from what is on the glass.
+static void dragToCanvas(int scroll) {
+  dragFrameSetup(scroll);
+  uint16_t *band = gfx->getFramebuffer() + (size_t)GRID_Y0 * LCD_WIDTH;
+  for (int r = 0; r < GRID_BAND_H; r++) {
+    uint16_t *d = band + (size_t)r * LCD_WIDTH;
+    int a = rowX0[r], b = rowX0[r] + rowLen[r];
+    if (a >= b) continue;
+    dragRow(r, flushTmpRow(), nullptr);
+    uint16_t *t = flushTmpRow();
+    for (int x = a; x < b; x++) d[x] = __builtin_bswap16(t[x]);
+  }
 }
 
 static void homeDragDraw(int scroll) {
   uint32_t u0 = micros();
-  uint16_t *band = gfx->getFramebuffer() + (size_t)GRID_Y0 * LCD_WIDTH;
-  int p0 = scroll >= 0 ? scroll / LCD_WIDTH : -1;
-  int o = scroll - p0 * LCD_WIDTH;            // 0..LCD_WIDTH-1: where page p0 is cut
-  int cut = LCD_WIDTH - o;                    // screen x where page p0 ends
-  bool has0 = p0 >= 0 && p0 < GRID_PAGES, has1 = p0 + 1 >= 0 && p0 + 1 < GRID_PAGES;
-  for (int r = 0; r < GRID_BAND_H; r++) {
-    size_t row = (size_t)r * LCD_WIDTH;
-    int a = rowX0[r], b = rowX0[r] + rowLen[r];
-    if (a >= b) continue;
-    uint16_t *d = band + row;
-    const uint16_t *bg = dragBg + row;
-    int m = cut < a ? a : cut > b ? b : cut;  // [a, m) from page p0, [m, b) from page p0 + 1
-    if (m > a) { if (has0) dragMix(d + a, bg + a, dragLayer[p0] + row + o + a, m - a); else memcpy(d + a, bg + a, (m - a) * 2); }
-    if (b > m) { if (has1) dragMix(d + m, bg + m, dragLayer[p0 + 1] + row + (m - cut), b - m); else memcpy(d + m, bg + m, (b - m) * 2); }
+  dragFrameSetup(scroll);
+  if (!fastLcdStream(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H, dragRow, nullptr)) {   // no fast path: via the canvas
+    dragToCanvas(scroll);
+    flushRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H);
   }
-  int near = (scroll + LCD_WIDTH / 2) / LCD_WIDTH;
-  gridDots(near < 0 ? 0 : near >= GRID_PAGES ? GRID_PAGES - 1 : near);
-  flushRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H);
   dragScroll = scroll;
   dragFrames++;
   dragUs += micros() - u0;
@@ -640,6 +688,7 @@ static void homeGlideFinish() {
   homeGliding = false;
   homePage = glideTarget;
   if (dragScroll != glideTo) homeDragDraw(glideTo);
+  dragToCanvas(glideTo);                      // the canvas catches up with the glass (frames skipped it)
   gridPager();                                // arrows (and dots) on top of the composed band
   flushRect(0, GRID_ARROW_Y - 20, LCD_WIDTH, 40);
   flushRect(0, GRID_DOTS_Y - 6, LCD_WIDTH, 12);
@@ -1295,7 +1344,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.43 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.44 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

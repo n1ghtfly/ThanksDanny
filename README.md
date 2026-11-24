@@ -1127,6 +1127,18 @@ Swiping felt sluggish, worst right after a page change. Causes and fixes:
 Log: `ui     : drag layers made in N ms`, and per page change `... N frames, N ms/frame`.
 Build: 3,589,823 bytes (76%).
 
+## v3.44 - drag frames straight to the glass
+
+Still not smooth after v3.43. Each drag frame went through the PSRAM canvas twice: mix ~106k pixels into
+the canvas, then read them back, byte-swap and send (`flushRect`). New `fastLcdStream(x, y, w, h, fn, ctx)`
+in `src/fastlcd.cpp`: `fn` writes each row straight into the internal-RAM DMA buffer, so mixing the next
+rows overlaps with sending the previous ones and the canvas is not touched at all. The drag layers are
+kept byte-swapped (panel order, key `0x2108`), so the mix needs no swap; the page dots are drawn in the
+row callback. PSRAM traffic per frame roughly halves and the CPU work overlaps the wire. At the end of
+the glide the final frame is written into the canvas once (`dragToCanvas`), so later partial updates
+start from what is on the glass. Falls back to canvas + `flushRect` without the fast path.
+Build: 3,590,795 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

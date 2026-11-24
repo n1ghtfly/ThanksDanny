@@ -108,3 +108,41 @@ void fastLcdBlit(int x, int y, int w, int h, const uint16_t *src, int stride) {
   gpio_set_level((gpio_num_t)sCs, 1);
   spi_device_release_bus(sDev);
 }
+
+bool fastLcdStream(int x, int y, int w, int h, FastRowFn fn, void *ctx) {
+  if (!sReady || w <= 0 || h <= 0 || (w & 1) || w > FAST_PX) return false;
+  sPanel->startWrite();
+  sPanel->writeAddrWindow(x, y, w, h);
+  sPanel->endWrite();
+  spi_device_acquire_bus(sDev, portMAX_DELAY);
+  gpio_set_level((gpio_num_t)sCs, 0);
+  int rowsPer = FAST_PX / w;
+  int inFlight = 0, k = 0;
+  bool first = true;
+  spi_transaction_t *done;
+  for (int row = 0; row < h; row += rowsPer) {
+    int n = h - row < rowsPer ? h - row : rowsPer;
+    if (inFlight == 2) { spi_device_get_trans_result(sDev, &done, portMAX_DELAY); inFlight--; }
+    uint16_t *dst = (uint16_t *)sBuf[k];
+    for (int r = 0; r < n; r++) fn(row + r, dst + (size_t)r * w, ctx);
+    spi_transaction_ext_t *t = &sT[k];
+    memset(t, 0, sizeof(*t));
+    if (first) {
+      t->base.flags = SPI_TRANS_MODE_QIO;
+      t->base.cmd = 0x32;
+      t->base.addr = 0x003C00;
+      first = false;
+    } else {
+      t->base.flags = SPI_TRANS_MODE_QIO | SPI_TRANS_VARIABLE_CMD | SPI_TRANS_VARIABLE_ADDR | SPI_TRANS_VARIABLE_DUMMY;
+    }
+    t->base.tx_buffer = sBuf[k];
+    t->base.length = (size_t)n * w * 16;
+    spi_device_queue_trans(sDev, &t->base, portMAX_DELAY);
+    inFlight++;
+    k ^= 1;
+  }
+  while (inFlight) { spi_device_get_trans_result(sDev, &done, portMAX_DELAY); inFlight--; }
+  gpio_set_level((gpio_num_t)sCs, 1);
+  spi_device_release_bus(sDev);
+  return true;
+}
