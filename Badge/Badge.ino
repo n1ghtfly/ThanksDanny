@@ -55,6 +55,7 @@
  */
 
 #include <Arduino_GFX_Library.h>
+#include "src/fastlcd.h"                // v3.41: faster flush (overlapped DMA)
 #include <LittleFS.h>
 #include <TJpg_Decoder.h>
 #include <Wire.h>
@@ -209,10 +210,11 @@ bool jpegBlockTo(uint16_t *dest, int destW, int16_t x, int16_t y, uint16_t w, ui
 #define ST_MUSIC       15               // Phone.ino: Bluetooth media remote (v3.38)
 #define ST_NOTIFY      16               // Phone.ino: an iPhone notification card (v3.38)
 
-Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
+// v3.41: shared interface (last argument) - src/fastlcd.cpp adds its own faster device on the same bus.
+Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3, true);
 Arduino_CO5300  *panel = new Arduino_CO5300(bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
 // Everything draws here, in PSRAM; flush() sends the whole frame to the panel in one go.
-Arduino_Canvas  *gfx = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, panel);
+Arduino_Canvas  *gfx = new FastCanvas(LCD_WIDTH, LCD_HEIGHT, panel);   // v3.41: flush() via fastlcd
 
 // Send only part of the canvas to the glass (v2.6). A full flush is ~46 ms; a button highlight
 // is a 140x140 patch, ~5 ms. The CO5300 wants its window on even columns/rows with even sizes,
@@ -232,9 +234,12 @@ void flushRect(int x, int y, int w, int h) {
   // v3.16: a full-width band is already contiguous in the framebuffer - send it as it is,
   // without copying it into flushTmp first (the carousel slide is all full-width bands).
   if (x == 0 && w == LCD_WIDTH) {
-    panel->draw16bitRGBBitmap(0, y, gfx->getFramebuffer() + (size_t)y * LCD_WIDTH, w, h);
+    if (fastLcdReady()) fastLcdBlit(0, y, w, h, gfx->getFramebuffer() + (size_t)y * LCD_WIDTH, LCD_WIDTH);
+    else panel->draw16bitRGBBitmap(0, y, gfx->getFramebuffer() + (size_t)y * LCD_WIDTH, w, h);
     return;
   }
+  // v3.41: the fast path reads the rectangle straight out of the canvas (it takes a row stride).
+  if (fastLcdReady()) { fastLcdBlit(x, y, w, h, gfx->getFramebuffer() + (size_t)y * LCD_WIDTH + x, LCD_WIDTH); return; }
   if ((long)w * h > FLUSH_TMP_PX) { gfx->flush(); return; }
   if (!flushTmp) flushTmp = (uint16_t *)ps_malloc((size_t)FLUSH_TMP_PX * 2);
   if (!flushTmp) { gfx->flush(); return; }
@@ -442,6 +447,15 @@ void gridCell(int slot, bool lit) {
   gridLabel(x, y + GRID_LBL, APP_NAME[app], lit ? RGB565_WHITE : RGB565(210, 222, 236));
 }
 
+// Page dots, `cur` filled.
+static void gridDots(int cur) {
+  for (int p = 0; p < GRID_PAGES; p++) {
+    int x = 233 + (p * 2 - (GRID_PAGES - 1)) * 9;
+    if (p == cur) gfx->fillCircle(x, GRID_DOTS_Y, 4, RGB565_WHITE);
+    else gfx->drawCircle(x, GRID_DOTS_Y, 4, RGB565(150, 165, 185));
+  }
+}
+
 // Page arrows (only where there is a page to go to) and page dots.
 static void gridPager() {
   for (int k = 0; k < 2; k++) {
@@ -455,11 +469,7 @@ static void gridPager() {
       gfx->drawLine(x + 4 * d + t, y, x - 4 * d + t, y + 8, RGB565(200, 220, 245));
     }
   }
-  for (int p = 0; p < GRID_PAGES; p++) {
-    int x = 233 + (p * 2 - (GRID_PAGES - 1)) * 9;
-    if (p == homePage) gfx->fillCircle(x, GRID_DOTS_Y, 4, RGB565_WHITE);
-    else gfx->drawCircle(x, GRID_DOTS_Y, 4, RGB565(150, 165, 185));
-  }
+  gridDots(homePage);
 }
 
 void drawGrid() {
@@ -487,6 +497,104 @@ void homePageGo(int dir) {
   drawGrid();
   flushRect(0, GRID_Y0, LCD_WIDTH, GRID_Y1 - GRID_Y0 + 1);
   Serial.printf("ui     : home page %d/%d\n", homePage + 1, GRID_PAGES);
+}
+
+// ---- v3.41: the pages follow the finger ------------------------------------------------------
+// When a press turns into a sideways drag, the background band and each page's icons are rendered
+// ONCE into PSRAM layers (icons on a key colour). Every frame then only mixes them at the current
+// scroll offset and sends the band (~228 rows) with the fast flush. On the lift the pages glide to
+// the nearest page, or to the next one after a long enough drag or a quick flick.
+#define GRID_BAND_H (GRID_Y1 - GRID_Y0 + 1)
+#define DRAG_KEY    0x0821                  // "see-through" in the page layers (no icon uses it)
+#define DRAG_START  14                      // px sideways before a press becomes a drag
+static uint16_t *dragBg = nullptr, *dragLayer[GRID_PAGES] = { nullptr };
+static bool homeDragging = false;
+static int dragScroll = 0;                  // page p sits at p * LCD_WIDTH
+static uint32_t dragFrameAt = 0;
+static int dragFrames = 0;
+
+static bool homeDragPrepare() {
+  size_t n = (size_t)LCD_WIDTH * GRID_BAND_H;
+  if (!dragBg) dragBg = (uint16_t *)ps_malloc(n * 2);
+  for (int p = 0; p < GRID_PAGES; p++) if (!dragLayer[p]) dragLayer[p] = (uint16_t *)ps_malloc(n * 2);
+  if (!dragBg) return false;
+  for (int p = 0; p < GRID_PAGES; p++) if (!dragLayer[p]) return false;
+  uint16_t *band = gfx->getFramebuffer() + (size_t)GRID_Y0 * LCD_WIDTH;
+  gridBand();
+  memcpy(dragBg, band, n * 2);
+  int keep = homePage;
+  for (int p = 0; p < GRID_PAGES; p++) {
+    gfx->fillRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H, DRAG_KEY);
+    homePage = p;
+    for (int i = 0; i < GRID_SLOTS; i++) gridCell(i, false);
+    memcpy(dragLayer[p], band, n * 2);
+  }
+  homePage = keep;
+  dragFrames = 0;
+  return true;
+}
+
+// Copy `len` pixels of a layer row over the band row, skipping the key colour.
+static inline void dragMix(uint16_t *d, const uint16_t *bg, const uint16_t *l, int len) {
+  for (int i = 0; i < len; i++) { uint16_t v = l[i]; d[i] = v == DRAG_KEY ? bg[i] : v; }
+}
+
+static void homeDragDraw(int scroll) {
+  uint16_t *band = gfx->getFramebuffer() + (size_t)GRID_Y0 * LCD_WIDTH;
+  int p0 = scroll >= 0 ? scroll / LCD_WIDTH : -1;
+  int o = scroll - p0 * LCD_WIDTH;            // 0..LCD_WIDTH-1: where page p0 is cut
+  int len0 = LCD_WIDTH - o;
+  bool has0 = p0 >= 0 && p0 < GRID_PAGES, has1 = p0 + 1 >= 0 && p0 + 1 < GRID_PAGES;
+  for (int r = 0; r < GRID_BAND_H; r++) {
+    size_t row = (size_t)r * LCD_WIDTH;
+    uint16_t *d = band + row;
+    const uint16_t *bg = dragBg + row;
+    if (has0) dragMix(d, bg, dragLayer[p0] + row + o, len0); else memcpy(d, bg, len0 * 2);
+    if (o) {
+      if (has1) dragMix(d + len0, bg + len0, dragLayer[p0 + 1] + row, o); else memcpy(d + len0, bg + len0, o * 2);
+    }
+  }
+  int near = (scroll + LCD_WIDTH / 2) / LCD_WIDTH;
+  gridDots(near < 0 ? 0 : near >= GRID_PAGES ? GRID_PAGES - 1 : near);
+  flushRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H);
+  dragScroll = scroll;
+  dragFrames++;
+}
+
+// The finger moved: mx = how far sideways since the press. Past the first/last page it gives way slowly.
+static void homeDragMove(int mx) {
+  int maxS = (GRID_PAGES - 1) * LCD_WIDTH;
+  int s = homePage * LCD_WIDTH - mx;
+  if (s < 0) s /= 3;
+  else if (s > maxS) s = maxS + (s - maxS) / 3;
+  uint32_t now = millis();
+  if (s == dragScroll || now - dragFrameAt < 10) return;
+  dragFrameAt = now;
+  homeDragDraw(s);
+}
+
+// Finger up after a drag: glide to the page it lands on, then draw that page the normal way.
+static void homeDragEnd(int mx, uint32_t pressMs) {
+  homeDragging = false;
+  int target = homePage;
+  bool flick = abs(mx) > 40 && pressMs < 250;
+  if (abs(mx) > LCD_WIDTH / 4 || flick) target += mx < 0 ? 1 : -1;
+  if (target < 0) target = 0;
+  if (target >= GRID_PAGES) target = GRID_PAGES - 1;
+  int from = dragScroll, to = target * LCD_WIDTH;
+  uint32_t t0 = millis();
+  const uint32_t dur = 170;
+  while (true) {                              // ease-out: fast start, gentle stop (~10 frames)
+    uint32_t t = millis() - t0;
+    if (t >= dur) break;
+    float f = (float)t / dur, e = 1 - (1 - f) * (1 - f) * (1 - f);
+    homeDragDraw(from + (int)((to - from) * e));
+  }
+  homePage = target;
+  drawGrid();
+  flushRect(0, GRID_Y0, LCD_WIDTH, GRID_BAND_H);
+  Serial.printf("ui     : home page %d/%d (drag %d px, %lu ms, %d frames)\n", homePage + 1, GRID_PAGES, mx,
+                (unsigned long)pressMs, dragFrames);
 }
 
 // Which slot of the current page a point is on, or -1.
@@ -1034,6 +1142,7 @@ void pollTouch() {
   if (touchDown && gap > 2 * POLL_MS + 4) tLastSeen += gap - POLL_MS;
   tLastPoll = now;
 
+  if (homeDragging && screen != ST_HOME) homeDragging = false;   // e.g. a slap took over the screen
   if (n > 0) {
     tLastSeen = now;
     saverPoke();                             // Screensaver.ino: a finger on the glass = not idle
@@ -1061,12 +1170,16 @@ void pollTouch() {
     tLastY = ys[0];
     // A finger that slides off the app it landed on cancels it. v3.36: a clear sideways swipe on
     // the home screen turns the page.
-    if (screen == ST_HOME && !tSwiped) {
+    // v3.41: a sideways drag moves the pages with the finger.
+    if (screen == ST_HOME && homeDragging) {
+      homeDragMove(tLastX - tStartX);
+    } else if (screen == ST_HOME && !tSwiped) {
       int mx = tLastX - tStartX, my = tLastY - tStartY;
-      if (abs(mx) > 50 && abs(mx) > 2 * abs(my)) {
+      if (abs(mx) > DRAG_START && 2 * abs(mx) > 3 * abs(my)) {
         homePressClear();
         tSwiped = true;
-        homePageGo(mx < 0 ? 1 : -1);
+        if (homeDragPrepare()) { homeDragging = true; dragScroll = homePage * LCD_WIDTH; homeDragMove(mx); }
+        else homePageGo(mx < 0 ? 1 : -1);    // no PSRAM for the layers: the old jump
       } else if (homePressed >= 0 && mx * mx + my * my > 30 * 30) { homePressClear(); tSwiped = true; }
     }
     return;
@@ -1074,6 +1187,7 @@ void pollTouch() {
 
   if (!touchDown || now - tLastSeen < RELEASE_MS) return;
   touchDown = false;
+  if (homeDragging) { homeDragEnd(tLastX - tStartX, tLastSeen - tDownAt); lastTap = now; return; }
   if (tSwiped) return;
   int mx = tLastX - tStartX, my = tLastY - tStartY;
   if (mx * mx + my * my > 30 * 30) {         // wandered too far for a tap, too little for a swipe
@@ -1100,14 +1214,20 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.40 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.41 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
   gfx->fillScreen(RGB565_BLACK);
   uint32_t f0 = millis();
   gfx->flush();
+  uint32_t slowMs = millis() - f0;
+  bool fast = fastLcdBegin(panel, LCD_CS, LCD_QSPI_HZ);       // v3.41: src/fastlcd.cpp
+  f0 = millis();
+  gfx->flush();
   uint32_t flushMs = millis() - f0;
+  Serial.printf("panel  : fast flush %s - full frame %lu ms (library path %lu ms)\n",
+                fast ? "on" : "NOT available", (unsigned long)flushMs, (unsigned long)slowMs);
   panel->setBrightness(170);                   // the panel's own command, not the canvas's
   Serial.printf("panel  : CO5300 up, %dx%d round (visible circle r=%d), QSPI %d MHz, full frame %lu ms\n",
                 LCD_WIDTH, LCD_HEIGHT, PANEL_R, LCD_QSPI_HZ / 1000000, (unsigned long)flushMs);

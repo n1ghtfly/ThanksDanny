@@ -1073,6 +1073,30 @@ at boot, the last start crashed inside Bluetooth, so it stays off (log line `pho
 MUSIC switches it on again. A Bluetooth bug can no longer lock the badge in a boot loop.
 Build: 3,335,079 bytes (70%).
 
+## v3.41 - smoother: 4x faster screen updates, home pages follow the finger
+
+A badge with Waveshare's stock firmware (LVGL) scrolled much more smoothly. Two causes on our side:
+
+- **Slow flush.** `Arduino_ESP32QSPI::writePixels()` sends 1024-pixel pieces, and for each one byte-swaps
+  from PSRAM, then starts the transfer and waits for it - nothing overlaps (~213 rounds, 46 ms a frame,
+  ~1/4 of what 80 MHz quad SPI carries). New `src/fastlcd.cpp`: a second SPI device on the same bus with
+  two 16 kB DMA buffers in internal RAM; the CPU swaps the next rows while the previous piece is on the
+  wire (queued DMA). The address window still goes through the library (`Arduino_CO5300` caches it).
+  The GFX bus is now created with `is_shared_interface = true` (otherwise the library holds the bus for
+  ever). `FastCanvas` (a `Arduino_Canvas` whose `flush()` takes this path) and `flushRect()` use it -
+  `flushRect()` no longer copies into a temp buffer (the fast path takes a row stride). Boot log:
+  `panel  : fast flush on - full frame N ms (library path 46 ms)`. Falls back to the library if the
+  device or buffers cannot be had.
+- **No drag.** The home pages jumped after a 50 px swipe. Now a sideways press of 14 px becomes a drag:
+  the background band and each page's icons are rendered once into PSRAM layers (key colour 0x0821 =
+  see-through), every frame mixes them at the scroll offset and sends the 228-row band; past the first /
+  last page it gives way at 1/3. On the lift: next page after a quarter-screen drag or a quick flick
+  (>40 px in <250 ms), otherwise back; a 170 ms ease-out glide. Log: `ui     : home page 2/2 (drag ...
+  frames)`.
+
+Not changed yet: the tap guards (90 ms between taps, 300 ms after a screen change) - to be shortened once
+the faster flush is confirmed on the badge. Build: 3,338,087 bytes (70%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel
