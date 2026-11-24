@@ -1,18 +1,18 @@
-# Thanks Danny badge - project index (v3.51, 24 Nov 2026)
+# Thanks Danny badge - project index (v3.52, 24 Nov 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.51)
+## What the badge does (v3.52)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home** (v3.36): Sons of Sudo wallpaper with an app grid under the sign - two pages of five big icons
   with their names (arrows, swipe or dots to change page), and the Wi-Fi / badge network pill at the top.
   Tap an app to open it (it lights up as soon as it is touched; slide away to cancel).
 - **Phone** (v3.38): a remote-control page at `http://badge-<name>.local/remote` (volume, sounds, soundboard,
-  open apps, Oracle, slaps, gotchi); the **MUSIC** app makes the badge a Bluetooth media remote for your phone
-  (play/pause, next/previous, volume); a paired **iPhone** shows its notifications on the badge.
+  open apps, Oracle, slaps, gotchi). (The Bluetooth MUSIC remote + iPhone notifications of v3.38 were removed
+  in v3.52 - Bluetooth took the internal RAM that TLS needs.)
 - **Danny-gotchi** (v3.33): pixel-art Danny who needs coffee, thanks and sleep in real time; slaps upset
   him, shaking makes him dizzy, neglect ends in a KERNEL PANIC. Job title grows with uptime.
 - **Pictures**: downloads the pictures from GitHub Pages
@@ -62,7 +62,7 @@ measurements); this page is the map.
 
 | Folder / file | What it is |
 |---|---|
-| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, home app grid, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Sos.ino` (badge network + Slap), `Screensaver.ino` (SOS MARKETS screensaver), `Nope.ino` (Danny's excuses), `Vote.ino` (questions from the poll website), `Radar.ino` + `src/adsbparse.c` (plane radar), `Oracle.ino` + `oracle_sounds.h` (network 8-ball), `Clock.ino` + `clock_assets.h` (cyberpunk HUD clock), `Gotchi.ino` + `gotchi_assets.h` (Danny-gotchi), `Remote.ino` + `remote_page.h` (phone remote page), `Phone.ino` + `src/phonelink.*` (Bluetooth media remote, iPhone notifications), `ui_fonts.h` (home + Settings typeface, generated), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
+| `Badge/` | **The firmware.** `Badge.ino` (screen, touch, home app grid, Wi-Fi), `Gallery.ino` (Pictures), `Decider.ino` (coin toss + sound), `Rumours.ino` (rumour player), `Sos.ino` (badge network + Slap), `Screensaver.ino` (SOS MARKETS screensaver), `Nope.ino` (Danny's excuses), `Vote.ino` (questions from the poll website), `Radar.ino` + `src/adsbparse.c` (plane radar), `Oracle.ino` + `oracle_sounds.h` (network 8-ball), `Clock.ino` + `clock_assets.h` (cyberpunk HUD clock), `Gotchi.ino` + `gotchi_assets.h` (Danny-gotchi), `Remote.ino` + `remote_page.h` (phone remote page), `ui_fonts.h` (home + Settings typeface, generated), `src/sosnet.cpp` (MQTT link), `src/` (Helix MP3 decoder + stream loop), `decider_assets.h` / `decider_sound.h` (generated), `es8311.*` (audio codec driver), `sketch.yaml` (board settings) |
 | `tools/flash_badge.cmd` | Double-click: clean build + upload + boot log. |
 | `tools/prep_decider.py` | `assets/chooser` badges -> `Badge/decider_assets.h` |
 | `tools/prep_decider_sound.py` | `assets/chooser/drummroll.mp3` -> `Badge/decider_sound.h` (needs ffmpeg) |

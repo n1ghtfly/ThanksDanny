@@ -47,7 +47,7 @@ button:active{background:#2b3557;transform:scale(.97)}
 
 <div id="toast"></div>
 <script>
-const APPS=["PICTURES","ASK DANNY","RUMOURS","SLAP","RADAR","ORACLE","CLOCK","GOTCHI","MUSIC","SETTINGS"];
+const APPS=["PICTURES","ASK DANNY","RUMOURS","SLAP","RADAR","ORACLE","CLOCK","GOTCHI","SETTINGS"];
 let st=null,volT=null;
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.opacity=1;clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity=0,1600)}
 async function go(q,msg){try{const r=await fetch('/api/do?'+q);const j=await r.json();toast(j.ok?(msg||'Done'):(j.err||'Not possible'));setTimeout(load,400)}catch(e){toast('Badge not reachable')}}

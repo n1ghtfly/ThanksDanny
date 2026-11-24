@@ -1237,6 +1237,20 @@ If it still fails with Bluetooth on, next step: release the BT controller memory
 or keep TLS sessions from overlapping.
 Build: 3,593,211 bytes (76%).
 
+## v3.52 - MUSIC / Bluetooth removed; MQTT before the picture sync
+
+v3.51 log with the memory numbers: `mbedtls_ssl_setup returned -0x7F00` (MBEDTLS_ERR_SSL_ALLOC_FAILED),
+`internal RAM free 39888, largest block 15348`. mbedTLS needs two ~17 kB blocks of INTERNAL RAM per session
+(`CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC`, 16 kB in + 16 kB out); the RAM was there in total but fragmented.
+- **MUSIC app, Bluetooth media remote and iPhone notifications removed** (owner's call): `Phone.ino`,
+  `src/phonelink.*` deleted. With no BLE library linked, `btInUse()` is false again, so the core releases the
+  Bluetooth controller's reserved memory at boot (`esp_bt_controller_mem_release`), and NimBLE's heap use is
+  gone even when Bluetooth was on. Home page 2 now has four apps (the bottom one centred). `APP_MUSIC` stays
+  as an index only (the icon table is indexed by app). Flash: 3,345,379 bytes (70%, was 76%).
+- **The badge network connects first**: on Wi-Fi up, `sosStart()` runs at once and the picture sync
+  (`contentSyncStart()`, 16 kB task stack + its own TLS session) waits until MQTT is connected, or 30 s.
+  MQTT's long-lived session gets its buffers while internal RAM is still in one piece.
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

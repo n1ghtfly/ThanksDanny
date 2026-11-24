@@ -138,7 +138,7 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 #define APP_CLOCK    6                   // v3.27
 #define APP_SETTINGS 7
 #define APP_GOTCHI   8                   // v3.33
-#define APP_MUSIC    9                   // v3.38: Bluetooth media remote (Phone.ino)
+#define APP_MUSIC    9                   // v3.38-3.51: Bluetooth media remote - removed in v3.52 (index kept for the icon table)
 static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS", "GOTCHI", "MUSIC" };
 #define RELEASE_MS  60                   // no finger reported for this long = lifted (see pollTouch; v3.48: 35 -> 60,
                                          // the CST9217 can go quiet for >35 ms with the finger still down)
@@ -156,7 +156,7 @@ static const int GRID_SX[GRID_SLOTS] = { 113, 233, 353, 178, 288 };
 static const int GRID_SY[GRID_SLOTS] = { 282, 282, 282, 386, 386 };
 static const int GRID_PAGE[GRID_PAGES][GRID_SLOTS] = {
   { APP_PICTURES, APP_DECIDER, APP_RUMOURS, APP_GOTCHI, APP_SLAP },
-  { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SETTINGS, APP_MUSIC } };
+  { APP_RADAR, APP_ORACLE, APP_CLOCK, APP_SETTINGS, -1 } };      // v3.52: MUSIC removed
 #define GRID_LBL    (GRID_R + 8)         // label top, below the icon centre
 #define GRID_HIT    52                   // tap radius round an icon
 #define GRID_Y0     238                  // the darkened band behind the grid (wallpaper rows)
@@ -810,7 +810,6 @@ void openApp(int app) {
     case APP_ORACLE:   showScreen(ST_ORACLE);  break;
     case APP_CLOCK:    showScreen(ST_CLOCK);   break;
     case APP_GOTCHI:   showScreen(ST_GOTCHI);  break;
-    case APP_MUSIC:    showScreen(ST_MUSIC);   break;
     case APP_SETTINGS: showScreen(ST_MENU);    break;
   }
 }
@@ -952,8 +951,6 @@ void showScreen(int s) {
     case ST_ORACLE:       showOracle();       return;  // Oracle.ino
     case ST_CLOCK:        showClock();        return;  // Clock.ino; redrawn by clockTick()
     case ST_GOTCHI:       showGotchi();       return;  // Gotchi.ino; animated by gotchiTick()
-    case ST_MUSIC:        showMusic();        return;  // Phone.ino
-    case ST_NOTIFY:       showNotify();       return;  // Phone.ino
   }
   uint32_t t1 = millis();
   gfx->flush();                                // the screen was composed in RAM; send it once
@@ -1112,7 +1109,8 @@ void handleRescan() {
   server.send(302, "text/plain", "");
 }
 
-static uint32_t apRetryAt = 0;          // v3.50: when the saved network was last tried while the AP is up
+static uint32_t apRetryAt = 0;
+static uint32_t syncPendingAt = 0;      // v3.52: picture sync waits for the badge network          // v3.50: when the saved network was last tried while the AP is up
 
 void startSetupAP() {
   // v3.50: stop the station side first. Left on, it keeps retrying the saved network - scanning every
@@ -1220,8 +1218,6 @@ void handleTap(int16_t x, int16_t y) {
   if (screen == ST_ORACLE)  { oracleTap(x, y);  lastActMs = millis() - t0; return; }
   if (screen == ST_CLOCK)   { clockTap(x, y);   lastActMs = millis() - t0; return; }
   if (screen == ST_GOTCHI)  { gotchiTap(x, y);  lastActMs = millis() - t0; return; }
-  if (screen == ST_MUSIC)   { musicTap(x, y);   lastActMs = millis() - t0; return; }
-  if (screen == ST_NOTIFY)  { notifyTap(x, y);  lastActMs = millis() - t0; return; }
 
   if (screen == ST_RUMOURS) {
     void rumoursTap(int x, int y);            // Rumours.ino
@@ -1444,7 +1440,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.51 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.52 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1529,7 +1525,6 @@ void setup() {
   webBegin();                                  // v3.13: the setup page, on every network
   showScreen(ST_HOME);
   saverPoke();                                 // the idle clock starts at the home screen
-  phoneSetup();                                // v3.38: Bluetooth, if it was on (Phone.ino)
   Serial.printf("touch  : polled every %d ms, tap guard %d ms\n", POLL_MS, TAP_GUARD_MS);
   Serial.printf("mem    : internal RAM free %u, largest block %u; PSRAM free %u kB\n",
                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
@@ -1540,7 +1535,7 @@ void setup() {
 
 // v3.46: where does loop() spend its time? The worst pass of each part since the last swipe started is kept
 // and shown in the swipe pill ("slow web 812"). LP(i) closes part i.
-static const char *LP_NAME[9] = { "web", "remote", "phone", "touch", "wifi", "sos", "apps", "home", "saver" };
+static const char *LP_NAME[9] = { "web", "remote", "-", "touch", "wifi", "sos", "apps", "home", "saver" };
 static uint32_t lpMax[9], lpMaxAll = 0, lpT0 = 0, lpPass0 = 0;
 #define LP(i) do { uint32_t _n = micros(); if (_n - lpT0 > lpMax[i]) lpMax[i] = _n - lpT0; lpT0 = _n; } while (0)
 const char *loopPartName(int i) { return i >= 0 && i < 9 ? LP_NAME[i] : "?"; }
@@ -1569,7 +1564,6 @@ void loop() {
   LP(0);
   remoteTick();                        // v3.38: a queued command from the remote page
   LP(1);
-  phoneTick();                         // v3.38: MUSIC status, iPhone notifications (Phone.ino)
   LP(2);
 
   if (saverActive()) {
@@ -1589,6 +1583,15 @@ void loop() {
   LP(3);
 
   apRetryTick();
+  if (syncPendingAt) {                                // v3.52: picture sync once MQTT is up (or 30 s)
+    bool sosConfigured(); bool sosnet_connected();
+    if (sosnet_connected() || !sosConfigured() || millis() - syncPendingAt > 30000UL) {
+      Serial.printf("sync   : starting (badge network %s)\n", sosnet_connected() ? "connected" : "not connected");
+      syncPendingAt = 0;
+      void contentSyncStart();
+      contentSyncStart();
+    }
+  }
   if (connecting) {
     if (WiFi.status() == WL_CONNECTED) {
       connecting = false;
@@ -1615,10 +1618,12 @@ void loop() {
       // new pictures appear after a reboot. It also exercises the download path at every boot
       // without needing a tap, which is how it gets tested.
       // v3.6: in a background task on core 0, so the carousel keeps responding (Gallery.ino).
-      void contentSyncStart();
-      contentSyncStart();
+      // v3.52: the badge network FIRST, the picture sync after it is connected (or after 30 s): both need a
+      // TLS session (~33 kB of internal RAM each), and when the sync went first the MQTT one failed with
+      // "mbedtls_ssl_setup returned -0x7F00" (no block big enough).
       void sosStart();                  // Sos.ino: join the badge network
       sosStart();
+      syncPendingAt = millis();
       // Redraw the home screen so its Wi-Fi line shows the address (a redraw is ~80 ms now), and
       // come back to it if a first-boot sync took the screen over.
       if (screen == ST_HOME || screen == ST_GALLERY_SYNC) showScreen(ST_HOME);
