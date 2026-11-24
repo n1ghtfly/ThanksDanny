@@ -1,10 +1,10 @@
-# Thanks Danny badge - project index (v3.50, 24 Nov 2026)
+# Thanks Danny badge - project index (v3.51, 24 Nov 2026)
 
 Firmware and tools for the Waveshare **ESP32-S3-Touch-AMOLED-1.75C** round badge.
 `README.md` is the full engineering log (hardware facts, every version's reasoning and
 measurements); this page is the map.
 
-## What the badge does (v3.50)
+## What the badge does (v3.51)
 
 - **Startup**: straight to the home screen (the v3.0 splash picture and sound were removed in v3.10).
 - **Home** (v3.36): Sons of Sudo wallpaper with an app grid under the sign - two pages of five big icons

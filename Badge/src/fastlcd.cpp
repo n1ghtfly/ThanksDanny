@@ -6,7 +6,7 @@
  * (spi_device_polling_start + polling_end). Nothing overlaps: ~213 rounds of "swap, send, wait" made a
  * full 466x466 frame 46 ms, about four times what the 80 MHz quad bus can carry (~11 ms).
  *
- * Here: two 16 kB DMA buffers in internal RAM. While one is on the wire (queued, interrupt-driven DMA),
+ * Here: two small (4 kB, v3.51) DMA buffers in internal RAM. While one is on the wire (queued, interrupt-driven DMA),
  * the CPU swaps the next rows into the other. The address window (CASET / PASET / RAMWR) still goes
  * through the library - Arduino_CO5300 caches the window and would otherwise skip setting it later.
  *
@@ -22,7 +22,10 @@
 #include <esp_heap_caps.h>
 #include "fastlcd.h"
 
-#define FAST_PX   8192                         // pixels per piece (16 kB; the bus allows 16392 bytes)
+#define FAST_PX   2048                         // pixels per piece: 4 kB x 2 buffers of INTERNAL RAM
+// v3.51: was 8192 (2 x 16 kB). Internal RAM is what TLS needs too (mbedTLS allocates only there, ~33 kB per
+// connection): with Bluetooth on, the MQTT connection failed with ESP_ERR_MBEDTLS_SSL_SETUP_FAILED (0x8017).
+// Smaller pieces only add a few more queued transactions per frame (~1 ms on a full screen).
 #define FAST_HOST SPI2_HOST                    // = ESP32QSPI_SPI_HOST
 
 static Arduino_CO5300 *sPanel = nullptr;

@@ -6,6 +6,7 @@
 #include "mqtt_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 
 static esp_mqtt_client_handle_t s_client = nullptr;
 static QueueHandle_t s_rx = nullptr;
@@ -37,8 +38,12 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
           printf("sos    : MQTT refused, code %d - check user/password\n", e->error_handle->connect_return_code);
         } else if (e->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
           snprintf(s_status, sizeof(s_status), "cannot reach broker");
-          printf("sos    : MQTT transport error (tls 0x%x, sock errno %d)\n",
-                 (unsigned)e->error_handle->esp_tls_last_esp_err, e->error_handle->esp_transport_sock_errno);
+          printf("sos    : MQTT transport error (tls 0x%x, sock errno %d) - internal RAM free %u, largest block %u\n",
+                 (unsigned)e->error_handle->esp_tls_last_esp_err, e->error_handle->esp_transport_sock_errno,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+          if (e->error_handle->esp_tls_last_esp_err == 0x8017)       // ESP_ERR_MBEDTLS_SSL_SETUP_FAILED
+            snprintf(s_status, sizeof(s_status), "out of memory for TLS");
         }
       }
       break;

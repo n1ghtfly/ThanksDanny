@@ -1222,6 +1222,21 @@ every channel - so the AP's beacons kept dropping out and phones never saw the S
   back on once connected.
 Build: 3,592,987 bytes (76%).
 
+## v3.51 - MQTT: TLS out of internal RAM
+
+The badges stayed "connecting"; serial: `MQTT transport error (tls 0x8017, sock errno 0)`.
+0x8017 = `ESP_ERR_MBEDTLS_SSL_SETUP_FAILED`: `mbedtls_ssl_setup()` failed before anything went on the wire.
+This core's mbedTLS allocates only from INTERNAL RAM (`CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC`, 16 kB in + 16 kB
+out buffers, no asymmetric lengths) - and internal RAM is now shared with the Bluetooth stack (v3.38, once
+MUSIC was opened), the picture sync's own TLS session, and v3.41's fast-flush DMA buffers (2 x 16 kB).
+- `src/fastlcd.cpp`: `FAST_PX` 8192 -> 2048 (2 x 4 kB DMA buffers): 24 kB of internal RAM back, at the cost
+  of a few more queued SPI transactions per frame (~1 ms on a full screen).
+- The transport-error log line now includes the internal RAM free / largest block, and the status reads
+  "out of memory for TLS" for 0x8017; boot prints `mem    : internal RAM free ..., largest block ...`.
+If it still fails with Bluetooth on, next step: release the BT controller memory when Bluetooth is off,
+or keep TLS sessions from overlapping.
+Build: 3,593,211 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

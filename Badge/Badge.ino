@@ -1444,7 +1444,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.50 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.51 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1531,6 +1531,10 @@ void setup() {
   saverPoke();                                 // the idle clock starts at the home screen
   phoneSetup();                                // v3.38: Bluetooth, if it was on (Phone.ino)
   Serial.printf("touch  : polled every %d ms, tap guard %d ms\n", POLL_MS, TAP_GUARD_MS);
+  Serial.printf("mem    : internal RAM free %u, largest block %u; PSRAM free %u kB\n",
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                (unsigned)(ESP.getFreePsram() / 1024));
   Serial.println("ready");
 }
 
