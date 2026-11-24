@@ -105,7 +105,7 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 #define CONNECT_TIMEOUT_MS 20000
 #define MAX_SCAN 20
 
-#define TAP_GUARD_MS  90                  // between taps; was 220, which ate quick taps
+#define TAP_GUARD_MS  60                  // between taps; was 220, which ate quick taps (v3.48: 90 -> 60)
 #define POLL_MS        2                  // was 20 ms, which alone added visible lag
 
 // ------------------------------------------------------- round panel geometry
@@ -140,7 +140,8 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 #define APP_GOTCHI   8                   // v3.33
 #define APP_MUSIC    9                   // v3.38: Bluetooth media remote (Phone.ino)
 static const char *APP_NAME[APP_COUNT] = { "PICTURES", "ASK DANNY", "RUMOURS", "SLAP", "RADAR", "ORACLE", "CLOCK", "SETTINGS", "GOTCHI", "MUSIC" };
-#define RELEASE_MS  35                   // no finger reported for this long = lifted (see pollTouch)
+#define RELEASE_MS  60                   // no finger reported for this long = lifted (see pollTouch; v3.48: 35 -> 60,
+                                         // the CST9217 can go quiet for >35 ms with the finger still down)
 
 // v3.31: the home screen is an APP GRID - one tap opens an app. (Until v3.30: a swipe carousel
 // with a double tap to open - hard to use.) It sits below the Sons of Sudo sign in the wallpaper (its
@@ -724,9 +725,7 @@ static void homeGlideFinish() {
   if (0) snprintf(t, sizeof(t), "F%lu/%lu%s 1st%lu f%d d%lu/%lu gap%lu mv%d", (unsigned long)bootFlushMs, (unsigned long)bootSlowMs,
            fastLcdReady() ? "" : "!", (unsigned long)(dragFirstAt - dragDownAt), dragFrames,
            dragFrames ? (unsigned long)(dragUs / dragFrames / 1000) : 0UL, (unsigned long)(dragFrameMaxUs / 1000), gap, dragTouchMoves);
-  Serial.printf("ui     : diag %s\n", t);
-  homeDiagPill(t);
-  diagUntil = millis() + 6000;
+  Serial.printf("ui     : diag %s\n", t);      // v3.48: serial only (the on-screen pill is gone)
 }
 
 // A pill at the top, like the network one, with the timing text.
@@ -1296,7 +1295,7 @@ static bool    tSwiped = false;              // this press is used up (swiped, o
 static uint32_t tLastSeen = 0, tDownAt = 0;
 static uint32_t tLastPoll = 0;               // v3.32: when pollTouch() last ran
 static uint32_t tScreenAt = 0;               // v3.32: when a tap last changed the screen
-#define NEW_SCREEN_MS 300                    // a press this soon after = the same finger, ignore it
+#define NEW_SCREEN_MS 150                    // a press this soon after = the same finger, ignore it (v3.48: 300 -> 150)
 
 // Run handleTap() and note when it is done: an app can take a few hundred ms to open (the clock
 // decodes its background), and the next tap must be measured from when it is on the glass.
@@ -1437,7 +1436,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.47 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.48 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }

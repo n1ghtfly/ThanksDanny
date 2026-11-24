@@ -1169,13 +1169,30 @@ saver); the worst pass of each since the finger went down is kept, and the swipe
 v3.46 photo: `f16 d8 gap14 mv0 1st28 slow:touch 9` - no stall this time and a smooth 16-frame glide, but
 again **no touch position at all while dragging** (`mv0`): 28 ms after the finger lands the drag starts, and
 from then on the badge hears nothing, calls it a lift after 35 ms, and glides by itself.
-Likely cause: SensorLib's `TouchDrvCST92xx::getTouchPoints()` keeps only points with event code 0x06 and
+(Correction, see v3.48: this guess was WRONG - the chip only ever sent code 0x06.) Likely cause: SensorLib's `TouchDrvCST92xx::getTouchPoints()` keeps only points with event code 0x06 and
 returns "no points" for anything else - a moving finger reported with another code is dropped and looks
 like a lift. Now `touchReadRaw()` in Badge.ino reads the CST9217 itself (same protocol: read 0xD000,
 write ACK 0xAB; mirrored like `setMirrorXY(true, true)`) and accepts a finger with ANY event code except
 0 (up). A report with no finger ends the press (after 15 ms); otherwise, while dragging the pages, a lift
 needs 120 ms of silence (35 ms elsewhere). The swipe pill now shows the two most frequent event codes,
 e.g. `f12 mv18 1st30 e6:3 e7:22 slow:touch 9`. Build: 3,592,267 bytes (76%).
+
+## v3.48 - touch timings tuned, diagnostics pill removed
+
+**Correction to v3.47.** The v3.47 photos showed only event code 0x06 (`e6:24 e0:1`, `e6:17 e0:1`), so
+SensorLib was not dropping moving-finger reports. What fixed the swipe was the other half of v3.47: while
+dragging, a lift now needs 120 ms of silence instead of 35 ms. The CST9217 sometimes stays quiet for more
+than 35 ms with the finger still moving; that read as a lift, and the page glided off by itself. Each swipe
+now ends with one explicit finger-up report (`e0:1`), which ends the press at once. Slow swipes now deliver
+16-23 positions per drag; fast flicks only 1-5, because the chip itself reports little during them (they
+still land on the right page). `touchReadRaw()` stays: it is equivalent to the library and also reports the
+finger-up.
+
+Changes:
+- The red timing pill is gone (the network pill is back); the same line still goes to serial as `ui     : diag`.
+- `RELEASE_MS` 35 -> 60 (the same quiet spells, outside drags), `NEW_SCREEN_MS` 300 -> 150 (apps feel
+  quicker to respond after opening), `TAP_GUARD_MS` 90 -> 60.
+Build: 3,592,055 bytes (76%).
 
 ## Next steps
 
