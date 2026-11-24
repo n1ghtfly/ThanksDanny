@@ -1164,6 +1164,19 @@ To find what blocks: loop() is now timed in 9 parts (web, remote, phone, touch, 
 saver); the worst pass of each since the finger went down is kept, and the swipe pill shows the slowest:
 `f3 d9 gap530 mv0 1st50 slow:web 812`. Build: 3,591,851 bytes (76%).
 
+## v3.47 - touch: keep the reports of a moving finger
+
+v3.46 photo: `f16 d8 gap14 mv0 1st28 slow:touch 9` - no stall this time and a smooth 16-frame glide, but
+again **no touch position at all while dragging** (`mv0`): 28 ms after the finger lands the drag starts, and
+from then on the badge hears nothing, calls it a lift after 35 ms, and glides by itself.
+Likely cause: SensorLib's `TouchDrvCST92xx::getTouchPoints()` keeps only points with event code 0x06 and
+returns "no points" for anything else - a moving finger reported with another code is dropped and looks
+like a lift. Now `touchReadRaw()` in Badge.ino reads the CST9217 itself (same protocol: read 0xD000,
+write ACK 0xAB; mirrored like `setMirrorXY(true, true)`) and accepts a finger with ANY event code except
+0 (up). A report with no finger ends the press (after 15 ms); otherwise, while dragging the pages, a lift
+needs 120 ms of silence (35 ms elsewhere). The swipe pill now shows the two most frequent event codes,
+e.g. `f12 mv18 1st30 e6:3 e7:22 slow:touch 9`. Build: 3,592,267 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

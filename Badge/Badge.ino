@@ -529,6 +529,7 @@ void homePageGo(int dir) {
 #define DRAG_START  14                      // px sideways before a press becomes a drag
 static uint16_t *dragBg = nullptr, *dragLayer[GRID_PAGES] = { nullptr };
 static bool homeDragging = false;
+static uint16_t tEvSeen[16];                 // v3.47: touch event codes seen since the last press (for the pill)
 static int dragScroll = 0;                  // page p sits at p * LCD_WIDTH
 static uint32_t dragFrameAt = 0;
 static int dragFrames = 0;
@@ -708,7 +709,16 @@ static void homeGlideFinish() {
   unsigned long gap = dragFrames > 1 ? (dragLastAt - dragFirstAt) / (dragFrames - 1) : 0;
   int loopProfileWorst(uint32_t *us); const char *loopPartName(int i);
   uint32_t wus; int wi = loopProfileWorst(&wus);
-  snprintf(t, sizeof(t), "f%d d%lu gap%lu mv%d 1st%lu slow:%s %lu", dragFrames,
+  char evs[24] = ""; int ne = 0;               // the two most frequent event codes: "e6:4 e7:30"
+  for (int k = 0; k < 2; k++) {
+    int b = -1; for (int e = 0; e < 16; e++) if (tEvSeen[e] && (b < 0 || tEvSeen[e] > tEvSeen[b])) b = e;
+    if (b < 0) break;
+    ne += snprintf(evs + ne, sizeof(evs) - ne, " e%d:%u", b, tEvSeen[b]); tEvSeen[b] = 0;
+  }
+  memset(tEvSeen, 0, sizeof(tEvSeen));
+  snprintf(t, sizeof(t), "f%d mv%d 1st%lu%s slow:%s %lu", dragFrames, dragTouchMoves, (unsigned long)(dragFirstAt - dragDownAt), evs,
+           loopPartName(wi), (unsigned long)(wus / 1000));
+  if (0) snprintf(t, sizeof(t), "f%d d%lu gap%lu mv%d 1st%lu slow:%s %lu", dragFrames,
            dragFrames ? (unsigned long)(dragUs / dragFrames / 1000) : 0UL, gap, dragTouchMoves,
            (unsigned long)(dragFirstAt - dragDownAt), loopPartName(wi), (unsigned long)(wus / 1000));
   if (0) snprintf(t, sizeof(t), "F%lu/%lu%s 1st%lu f%d d%lu/%lu gap%lu mv%d", (unsigned long)bootFlushMs, (unsigned long)bootSlowMs,
@@ -1297,11 +1307,42 @@ static void tapAndNote(int x, int y) {
   if (screen != before) tScreenAt = lastTap;
 }
 
+// v3.47: read the CST9217 ourselves. SensorLib's getTouchPoints() keeps only points whose event code is
+// 0x06 and returns "no points" for everything else - so when a MOVING finger is reported with another
+// code, a swipe looks like a lift a few reports in (the v3.46 photos: mv0 - no position arrived during a
+// drag). Same protocol as the library: read 0xD000, then write the ACK (0xAB) back.
+// Returns -1 = no new report, 0 = a report with no finger, 1 = finger at *x, *y (event code in *ev).
+int touchReadRaw(int16_t *x, int16_t *y, int *ev) {
+  uint8_t b[15] = { 0 };
+  Wire.beginTransmission(TOUCH_ADDR);
+  Wire.write(0xD0); Wire.write(0x00);
+  if (Wire.endTransmission(false) != 0) return -1;
+  if (Wire.requestFrom((int)TOUCH_ADDR, (int)sizeof(b)) != (int)sizeof(b)) return -1;
+  for (unsigned i = 0; i < sizeof(b); i++) b[i] = Wire.read();
+  Wire.beginTransmission(TOUCH_ADDR);
+  Wire.write(0xD0); Wire.write(0x00); Wire.write(0xAB);
+  Wire.endTransmission();
+  if (b[0] == 0xAB || b[6] != 0xAB) return -1;               // nothing new since the last ACK
+  int n = b[5] & 0x7F;
+  int e = b[0] & 0x0F;
+  tEvSeen[e]++;
+  if (b[0] == 0x00) return -1;                                 // (the library also skips these)
+  if (n == 0 || n > 2) return 0;
+  *ev = e;
+  int rx = (b[1] << 4) | (b[3] >> 4), ry = (b[2] << 4) | (b[3] & 0x0F);
+  *x = LCD_WIDTH - rx;                                         // mirrored, like setMirrorXY(true, true)
+  *y = LCD_HEIGHT - ry;
+  if (e == 0x00) return 0;                                     // a finger-up report
+  return 1;
+}
+
 void pollTouch() {
   if (!touchOK) return;
   int16_t xs[1], ys[1];
   uint32_t r0 = micros();
-  uint8_t n = touch.getPoint(xs, ys, 1);
+  int ev = 0;
+  int raw = touchReadRaw(&xs[0], &ys[0], &ev);          // v3.47 (was touch.getPoint)
+  uint8_t n = raw == 1 ? 1 : 0;
   lastReadUs = micros() - r0;
   uint32_t now = millis();
   // v3.32: a finger is "lifted" after RELEASE_MS of empty reads - but only reads we actually did.
@@ -1328,6 +1369,7 @@ void pollTouch() {
         Serial.printf("touch  : press %lu ms after a screen change - same finger, ignored\n", (unsigned long)(now - tScreenAt));
       } else if (screen == ST_HOME) {
         loopProfileReset();                    // v3.46: measure this swipe
+        memset(tEvSeen, 0, sizeof(tEvSeen));
         homeGlideFinish();                     // v3.43: a touch during the glide lands it at once
         homePressFeedback(tStartX, tStartY);
       } else if (now - lastTap > TAP_GUARD_MS) {
@@ -1363,7 +1405,10 @@ void pollTouch() {
     return;
   }
 
-  if (!touchDown || now - tLastSeen < RELEASE_MS) return;
+  // v3.47: while dragging the pages, wait longer before calling it a lift (unless the chip says so).
+  if (!touchDown) return;
+  uint32_t quiet = now - tLastSeen;
+  if (raw == 0 ? quiet < 15 : quiet < (homeDragging ? 120u : (uint32_t)RELEASE_MS)) return;
   touchDown = false;
   if (homeDragging) { homeDragEnd(tLastX - tStartX, tLastSeen - tDownAt); lastTap = now; return; }
   if (tSwiped) return;
@@ -1392,7 +1437,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.46 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.47 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
