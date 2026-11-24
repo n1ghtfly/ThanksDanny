@@ -1209,6 +1209,19 @@ screensaver check still ran. `flash_badge.cmd` writes only the app, so the first
   core's esptool to 0x910000 - once per badge, for the wallpaper.
 Build: 3,592,443 bytes (76%).
 
+## v3.50 - setup network visible when the saved Wi-Fi is gone
+
+Reported: badge set up on a Wi-Fi network, that network removed, badge restarted. The badge said "join
+ThanksDanny-setup", but phones did not list it. After the 20 s connect timeout `startSetupAP()` raised the
+AP in `WIFI_AP_STA` mode while the station side kept auto-reconnecting to the missing network - scanning
+every channel - so the AP's beacons kept dropping out and phones never saw the SSID.
+- `startSetupAP()`: `WiFi.setAutoReconnect(false)` + `WiFi.disconnect(false, false)` (station only,
+  credentials kept) before `softAP()`.
+- `apRetryTick()` in loop(): every 2 minutes, if a network is saved and NO phone is on the setup network,
+  try it once more (`beginConnect()`, 20 s; on failure the AP is raised again). Auto-reconnect is turned
+  back on once connected.
+Build: 3,592,987 bytes (76%).
+
 ## Next steps
 
 - Flash v2 and read the boot log's `full frame` and `composed + flush` timings; confirm the panel

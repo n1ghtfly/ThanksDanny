@@ -1112,9 +1112,17 @@ void handleRescan() {
   server.send(302, "text/plain", "");
 }
 
+static uint32_t apRetryAt = 0;          // v3.50: when the saved network was last tried while the AP is up
+
 void startSetupAP() {
+  // v3.50: stop the station side first. Left on, it keeps retrying the saved network - scanning every
+  // channel - and the setup network's beacons drop out: phones did not list ThanksDanny-setup at all
+  // (seen with a saved network that no longer exists). loop() retries it now and then (apRetryTick).
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false, false);        // station only; keeps the saved credentials
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(AP_SSID);                 // open, and only while there is no working network
+  apRetryAt = millis();
   apAddress = WiFi.softAPIP().toString();
   webBegin();
   apRunning = true;
@@ -1436,7 +1444,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
   delay(300);
   Serial.println();
-  Serial.println("=== Thanks Danny badge v3.49 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
+  Serial.println("=== Thanks Danny badge v3.50 (" __DATE__ " " __TIME__ "): app carousel - pictures, ask danny, rumours, radar, oracle, clock, gotchi, music, slap, settings + screensaver + remote ===");
 
   // Canvas begin() starts the panel at LCD_QSPI_HZ and allocates the 434 kB frame in PSRAM.
   if (!gfx->begin(LCD_QSPI_HZ)) { Serial.println("! gfx->begin FAILED (panel or PSRAM canvas)"); return; }
@@ -1540,6 +1548,17 @@ int loopProfileWorst(uint32_t *us) {
   return w;
 }
 
+// v3.50: with the setup network up and a network saved, try that network again every 2 minutes - but
+// only while nobody is on the setup network (a retry takes the AP's channel away for ~20 s).
+void apRetryTick() {
+  if (!apRunning || connecting || !wifiSSID.length() || WiFi.status() == WL_CONNECTED) return;
+  if (millis() - apRetryAt < 120000UL) return;
+  apRetryAt = millis();
+  if (WiFi.softAPgetStationNum() > 0) { Serial.println("wifi   : retry skipped - a phone is on the setup network"); return; }
+  Serial.println("wifi   : trying the saved network again");
+  beginConnect();
+}
+
 void loop() {
   lpPass0 = lpT0 = micros();
   server.handleClient();               // setup page + remote page (v3.38)
@@ -1565,9 +1584,11 @@ void loop() {
   }
   LP(3);
 
+  apRetryTick();
   if (connecting) {
     if (WiFi.status() == WL_CONNECTED) {
       connecting = false;
+      WiFi.setAutoReconnect(true);                  // v3.50: off while the setup network was up
       Serial.printf("wifi   : connected to '%s', ip %s\n",
                     WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
       // TLS needs a sane clock. This board has no RTC, so without SNTP it thinks it is 1970 and
